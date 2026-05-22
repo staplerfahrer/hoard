@@ -8,6 +8,7 @@
 	"port"                    : 80,
 	"root"                    : "N:\\Pictures",
 	"selectionOutlineCss"     : "outline-color: oklch(0.6588 0.1061 82.79);",
+	"streamingChunkBytes"     : 10485760,
 	"thumbBackgroundColor"    : "#242321",
 	"thumbnailCss"            : "width: 400px; height: 400px; border-radius: 4px;",
 	"thumbnailPorts"          : [8080, 8081, 8082, 8083, 8084, 8085, 8086, 8087, 8088, 8089],

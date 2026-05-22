@@ -1,6 +1,7 @@
 __pycache__/
 _deploy/
-webServer/log.txt
-webServer/config.json
-webServer/resources/ffmpeg.exe
-webServer/resources/dcraw-9.27-ms-64-bit.exe
+hoard/config.json
+hoard/log.txt
+hoard/resources/dcraw.exe
+hoard/resources/libjpeg-62.dll
+hoard/venv/

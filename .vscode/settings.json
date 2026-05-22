@@ -2,5 +2,14 @@
     "files.exclude": {
         "**/__pycache__/": true
     },
-    "python.analysis.extraPaths": ["webServer"]
+	"python.analysis.extraPaths": [
+		"webServer"
+	],
+	"python-envs.pythonProjects": [
+		{
+			"path": ".",
+			"envManager": "ms-python.python:venv",
+			"packageManager": "ms-python.python:pip"
+		}
+	]
 }

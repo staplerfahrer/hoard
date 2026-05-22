@@ -24,12 +24,12 @@
 		{
 			"label": "test",
 			"type": "shell",
-			"command": "taskkill /f /im python.exe & py main.py",
+			"command": "taskkill /f /im python.exe & venv\\Scripts\\python.exe main.py",
 			"runOptions": {
 				"instancePolicy": "terminateOldest"
 			},
 			"options": {
-				"cwd": "webServer"
+				"cwd": "hoard"
 			},
 			"problemMatcher": [],
 			"group": {
