@@ -12,6 +12,7 @@
 	<div id="viewBox">
 		<img id="viewImg">
 		<img id="viewImg2">
+		<img id="viewImg3">
 		<video id="viewVideo" controls loop></video>
 	</div>
 	<div id="autoPlayButton"></div>
@@ -29,6 +30,7 @@
 		let vb             = null // viewBox
 		let vi             = null // viewImage (active buffer)
 		let vi2            = null // viewImage (back buffer, preloads next)
+		let vi3            = null // viewImage (back buffer, preloads prev)
 		let vv             = null // viewVideo
 		let autoPlayButton = null
 
@@ -59,6 +61,8 @@
 		vi = document.getElementById('viewImg')
 		vi2 = document.getElementById('viewImg2')
 		vi2.style.display = 'none'
+		vi3 = document.getElementById('viewImg3')
+		vi3.style.display = 'none'
 		vv = document.getElementById('viewVideo')
 		autoPlayButton = document.getElementById('autoPlayButton')
 
@@ -266,9 +270,17 @@
 		function imagesPerRow() {
 			if (viewerState.imgElms.length === 0) return 1
 			let firstTop = viewerState.imgElms[0].offsetTop
+			// skip first row
+			let i = 0
+			while (i < viewerState.imgElms.length) {
+				if (viewerState.imgElms[i].offsetTop > firstTop) break
+				i++
+			}
 			let count = 0
-			for (let i = 0; i < viewerState.imgElms.length; i++) {
-				if (viewerState.imgElms[i].offsetTop !== firstTop) break
+			firstTop = viewerState.imgElms[i].offsetTop
+			while (i < viewerState.imgElms.length) {
+				if (viewerState.imgElms[i].offsetTop > firstTop) break
+				i++
 				count++
 			}
 			return count || 1
@@ -305,16 +317,20 @@
 				}
 				vv.play()
 			} else {
-				// picture — double-buffered to avoid flicker
+				// picture — triple-buffered to avoid flicker in both directions
 				const absUrl = new URL(url, location.href).href
-				if (vi2.complete && vi2.naturalWidth > 0 && vi2.src === absUrl) {
-					// back buffer already has this image — swap instantly
+				const vi2Hit = vi2.complete && vi2.naturalWidth > 0 && vi2.src === absUrl
+				const vi3Hit = !vi2Hit && vi3.complete && vi3.naturalWidth > 0 && vi3.src === absUrl
+				if (vi2Hit || vi3Hit) {
+					// a back buffer already has this image — swap instantly
 					vi.style.display = 'none'
 					vi.classList.remove('slowZoom')
 					vi.onload = null
-					;[vi, vi2] = [vi2, vi]
+					if (vi2Hit) { ;[vi, vi2] = [vi2, vi] } else { ;[vi, vi3] = [vi3, vi] }
 					vi2.style.display = 'none'
 					vi2.onload = null
+					vi3.style.display = 'none'
+					vi3.onload = null
 					vi.style.display = ''
 					vi.style.visibility = 'hidden'
 					zoomStyle()
@@ -324,13 +340,21 @@
 					vi.onload = zoomStyle
 					vi.src = url
 				}
-				// preload next image into back buffer
+				// preload next into vi2, prev into vi3
 				const nextIdx = viewerState.viewedIndex + 1
 				if (nextIdx < viewerState.imgUrls.length) {
 					const nextUrl = viewerState.imgUrls[nextIdx]
 					if (vi2.src !== new URL(nextUrl, location.href).href) {
 						vi2.onload = null
 						vi2.src = nextUrl
+					}
+				}
+				const prevIdx = viewerState.viewedIndex - 1
+				if (prevIdx >= 0) {
+					const prevUrl = viewerState.imgUrls[prevIdx]
+					if (vi3.src !== new URL(prevUrl, location.href).href) {
+						vi3.onload = null
+						vi3.src = prevUrl
 					}
 				}
 				cacheNextImages()

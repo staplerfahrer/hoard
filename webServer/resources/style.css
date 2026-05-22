@@ -192,7 +192,7 @@ a {
 	display   : none;
 }
 
-#viewImg, #viewImg2 {
+#viewImg, #viewImg2, #viewImg3 {
 	display      : block;
 	margin       : auto;
 	max-height   : 99%;

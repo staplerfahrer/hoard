@@ -39,8 +39,7 @@ busy_thread_lock : threading.Lock            = threading.Lock()
 
 def check_dependencies():
 	deps = {
-		'dcraw.exe' : 'https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/',
-		'ffmpeg.exe': 'https://www.gyan.dev/ffmpeg/builds/ or https://ffmpeg.org/download.html',
+		'dcraw.exe': 'https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/',
 	}
 	show_message = False
 	for exe, url in deps.items():
