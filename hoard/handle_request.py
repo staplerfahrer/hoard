@@ -28,7 +28,7 @@ def build_response_bytes(req: str) -> bytes:
 	elif req_server_path.endswith('?tn'): # remove ?tn
 		result = handle_thumbnail.run(req_server_path)
 		if result is None:
-			return b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nRetry-After: 1\r\n\r\nBusy'
+			return b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nRetry-After: 10\r\n\r\nBusy'
 		data, mime = result
 
 	elif req_server_path.endswith('?del'):

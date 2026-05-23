@@ -102,7 +102,7 @@
 				return window.setTimeout(loadThumbsRandomly, fps)
 
 			let next = viewerState.lowestPending + Math.floor(
-				(Math.random() ** 1.3) * (viewerState.imgElms.length - viewerState.lowestPending + 1))
+				(Math.random() ** 1.6) * (viewerState.imgElms.length - viewerState.lowestPending + 1))
 
 			while (next < viewerState.imgElms.length && viewerState.imgElms[next]._requested)
 				next++

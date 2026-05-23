@@ -81,6 +81,7 @@ def run(server_path: str) -> tuple[bytes, str]:
 		.replace(b'{autoPlayTimer}', bytes(str(config('autoPlayTimer')), 'utf-8'))
 		.replace(b'{dirUrls}', bytes(json.dumps(client_children), 'utf-8'))
 		.replace(b'{imgUrls}', bytes(json.dumps(img_urls), 'utf-8'))
+		.replace(b'{scrollRateLimitMs}', bytes(str(config('scrollRateLimitMs')), 'utf-8'))
 		.replace(b'{siblingUrls}', bytes(json.dumps(client_siblings), 'utf-8'))
 		.replace(b'{zoomSpeed}', bytes(config('zoomSpeed'), 'utf-8'))
 		)

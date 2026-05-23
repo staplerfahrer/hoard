@@ -618,11 +618,12 @@
 			}
 
 			//////// horizontal scrolling
-			document.onwheel = (x) => {
+			document.addEventListener('wheel', (e) => {
+				if (window.zoomed) e.preventDefault()
+
 				if (window.busyScrolling) return
 
-				let delta = window.zoomed ? x.deltaY : x.deltaX
-				if (window.zoomed) x.preventDefault()
+				let delta = window.zoomed ? e.deltaY : e.deltaX
 
 				if (delta > 0) {
 					window.busyScrolling = true
@@ -640,9 +641,9 @@
 				if (window.busyScrolling) {
 					window.setTimeout(() => {
 						delete window.busyScrolling
-					}, 500)
+					}, {scrollRateLimitMs})
 				}
-			}
+			}, { passive: false })
 
 			// autoPlay
 			autoPlayButton.onclick = () => {

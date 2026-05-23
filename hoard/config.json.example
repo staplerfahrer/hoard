@@ -7,6 +7,7 @@
 	"galleryBackgroundCss"    : "background-color: oklch(0.2864 0.0038 82.79);",
 	"port"                    : 80,
 	"root"                    : "N:\\Pictures",
+	"scrollRateLimitMs"       : 50,
 	"selectionOutlineCss"     : "outline-color: oklch(0.6588 0.1061 82.79);",
 	"streamingChunkBytes"     : 10485760,
 	"thumbBackgroundColor"    : "#242321",
