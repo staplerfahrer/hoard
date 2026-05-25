@@ -2,15 +2,15 @@ from collections import deque
 from shutil import get_terminal_size
 from socket import create_server, socket
 from time import sleep, perf_counter
-import msvcrt
 import os
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import webbrowser
 
-from config import config
+from config import config, WINDOWS
 from log import log
 import handle_request
 import stats
@@ -51,14 +51,15 @@ def check_dependencies():
 
 	if show_message:
 		time.sleep(10)
+		os.system('cls' if WINDOWS else 'clear')
 
 
 def main():
 	try:
-		os.system('cls')
+		os.system('cls' if WINDOWS else 'clear')
 		check_dependencies()
 		if config('autoStart'):
-			subprocess.call(['explorer', 'http://127.0.0.1'])
+			webbrowser.open('http://127.0.0.1')
 
 		# UI thread
 		threading.Thread(
@@ -190,26 +191,48 @@ def ui():
 		req_sec_avg = req_sec * 0.005 + req_sec_avg * 0.995
 		last_rq = rq
 		stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {req_sec_avg:.0f} req/s'
-		sys.stdout.write(
-			f'\033[5A'
+		content = (
 			f'{title}\n'
 			f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
 			f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
 			f'\r\033[K{busy_workers :>4} workers {"W" * min(busy_workers, cols - 20)}\n'
 			f'\r\033[K{stats_line}\n'
 		)
+		sys.stdout.write(f'\033[{content.count(chr(10))}A' + content)
 		sys.stdout.flush()
 
 
 def hotkey_listener():
-	while True:
-		sleep(0.05)
-		if not msvcrt.kbhit():
-			continue
-		ch = msvcrt.getwch()
-		if ch == '\x12':  # Ctrl+R
-			log('Restarting...')
-			os.execv(sys.executable, [sys.executable] + sys.argv)
+	if WINDOWS:
+		import msvcrt
+		while True:
+			sleep(0.05)
+			if not msvcrt.kbhit():
+				continue
+			ch = msvcrt.getwch()
+			if ch == '\x12':  # Ctrl+R
+				log('Restarting...')
+				os.execv(sys.executable, [sys.executable] + sys.argv)
+	else:
+		if not sys.stdin.isatty():
+			return
+		import tty, termios, select as _select
+		fd           = sys.stdin.fileno()
+		old_settings = termios.tcgetattr(fd)
+		try:
+			tty.setraw(fd)
+			while True:
+				ready, _, _ = _select.select([sys.stdin], [], [], 0.05)
+				if ready:
+					ch = sys.stdin.read(1)
+					if ch == '\x12':  # Ctrl+R
+						termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+						log('Restarting...')
+						os.execv(sys.executable, [sys.executable] + sys.argv)
+		except Exception:
+			pass
+		finally:
+			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
 
 
 if __name__ == '__main__':

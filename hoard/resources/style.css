@@ -30,19 +30,58 @@ a {
 }
 
 
-/* TITLE /////////////////////////////////////////////////////////////////////*/
+/* TOP BAR (nav + title) /////////////////////////////////////////////////////*/
+#topBar {
+	position             : fixed;
+	top                  : 0;
+	left                 : 0;
+	right                : 0;
+	display              : grid;
+	grid-template-columns: 1fr 1fr 1fr 3fr;
+	align-items          : center;
+	z-index              : 8;
+	backdrop-filter      : blur(4px);
+	min-height           : 60px;
+	gap                  : 10px;
+	background-color     : #00000030;
+}
+
+#navPrevious, #navUp, #navNext,
+#navPrevious:visited, #navUp:visited, #navNext:visited {
+	color: #c09300;
+	text-align: center;
+	padding: 5px 0px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	outline-style: solid;
+	outline-offset: 0;
+	outline-width: 4px;
+	outline-color: transparent;
+	background-color: #00000042;
+	border-radius: 4px;
+}
+
+#navPrevious:hover, #navUp:hover, #navNext:hover {
+	background-color: #ffffff10;
+}
+
+#navPrevious:focus, #navUp:focus, #navNext:focus {
+	outline-color: #dab028;
+}
+
+.nav-hidden {
+	visibility    : hidden;
+	pointer-events: none;
+}
+
 #titleContainer {
-	padding         : 20px 10px 10px 10px;
-	text-align      : center;
-	position        : fixed;
-	top             : -10px;
-	margin          : 0 auto;
-	z-index         : 8;
-	min-width       : 15%;
-	background-color: #0000006e;
-	justify-self    : center;
-	border-radius   : 10px;
-	text-shadow     : 0 0 2px black;
+	text-align   : center;
+	padding      : 14px 12px;
+	text-shadow  : 0 0 2px black;
+	overflow     : hidden;
+	text-overflow: ellipsis;
+	white-space  : nowrap;
 }
 
 /* DIRECTORIES ///////////////////////////////////////////////////////////////*/
@@ -61,6 +100,10 @@ a {
 	display    : block;
 	width      : 100%;
 	white-space: nowrap;
+}
+
+#siblings a:hover, #children a:hover {
+	background-color: #ffffff10;
 }
 
 /* THUMBNAILS ////////////////////////////////////////////////////////////////*/
@@ -117,15 +160,11 @@ a {
 }
 
 
-/* NAVIGATION ////////////////////////////////////////////////////////////////*/
-#navigationContainer {
-	text-align: center;
-}
 
-#navigationContainer > a, #navigationContainer > a:visited {
-	display         : inline-block;
-	min-width       : 400px;
-	margin          : 20px;
+#backToTop {
+	display         : block;
+	width           : 400px;
+	margin          : 20px auto;
 	padding         : 10px;
 	background-color: #00000030;
 	border-radius   : 3px;
@@ -134,10 +173,7 @@ a {
 	outline-width   : 4px;
 	outline-color   : transparent;
 	color           : #c09300;
-}
-
-#navigationContainer > a:focus {
-	outline-color: #dab028;
+	text-align      : center;
 }
 
 

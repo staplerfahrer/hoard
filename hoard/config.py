@@ -1,7 +1,12 @@
 from log import log
 from typing import Any
 import json
+import sys
 import traceback
+
+WINDOWS = sys.platform == 'win32'
+MACOS   = sys.platform == 'darwin'
+LINUX   = sys.platform.startswith('linux')
 
 
 cached = False

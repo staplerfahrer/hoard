@@ -3,7 +3,7 @@ import subprocess
 import traceback
 import urllib.parse as urlparse
 
-from config import config
+from config import config, WINDOWS
 from log import log
 
 MIME: dict[str, str] = {
@@ -32,20 +32,18 @@ RAW_EXTS = frozenset({'.crw', '.cr2'})
 NON_IMAGE_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm', '.mp3', '.m4a', '.ogg', '.wav'})
 
 def dcraw_extract(server_path: str) -> bytes | None:
-	result = subprocess.run(
-		['resources/dcraw.exe', '-e', '-c', server_path],
-		capture_output=True
-	)
+	exe = os.path.join('resources', 'dcraw.exe') if WINDOWS else 'dcraw'
+	result = subprocess.run([exe, '-e', '-c', server_path], capture_output=True)
 	return result.stdout if result.returncode == 0 and result.stdout else None
 
 
 def to_client_path(file_path: str) -> str:
-	url = file_path.replace(config('root'), '').replace('\\', '/')
+	url = file_path.replace(config('root'), '').replace(os.sep, '/')
 	return urlparse.quote(url, safe='/,') if url else '/'
 
 
 def to_server_path(url: str) -> str:
-	return config('root') + url.replace('/', '\\')
+	return config('root') + url.replace('/', os.sep)
 
 
 def read_file_bytes(file_name: str, range_l: int | None = None, range_u: int | None = None) \

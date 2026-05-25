@@ -7,7 +7,7 @@ import handle_directory
 import handle_file
 import handle_thumbnail
 from log import log
-from config import config
+from config import config, WINDOWS, MACOS
 from resources import resource
 
 
@@ -48,9 +48,14 @@ def build_response_bytes(req: str) -> bytes:
 
 
 def _open_explorer(serverPath: str) -> tuple[bytes, str]:
-	target = serverPath[:-9] # strip '?explorer'
+	target = serverPath[:-9]  # strip '?explorer'
 	log('exploring: ' + target)
-	subprocess.Popen(f'explorer /select,"{target}"', shell=True)
+	if WINDOWS:
+		subprocess.Popen(f'explorer /select,"{target}"', shell=True)
+	elif MACOS:
+		subprocess.Popen(['open', '-R', target])
+	else:
+		subprocess.Popen(['xdg-open', os.path.dirname(target)])
 	return b'ok', 'text/plain'
 
 

@@ -22,6 +22,7 @@ copy %src%\main.py                   %dst%
 copy %src%\resources.py              %dst%
 copy %src%\requirements.txt          %dst%
 copy %src%\stats.py                  %dst%
+copy %src%\start.bat                 %dst%
 copy %src%\thumbnail.html            %dst%
 
 set src=%src%\resources
@@ -37,3 +38,7 @@ copy %src%\viewer-mask.png           %dst%
 
 set dst=_deploy
 explorer %dst%
+
+:: todo: make a separate build for Windows,
+:: run venv and pip install -r on it
+:: then zip the result automatically

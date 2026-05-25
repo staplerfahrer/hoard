@@ -1,7 +1,7 @@
 import io
 import os
 # pip install types-Pillow to fix Pylance
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter
 import av
 import threading
 import time
@@ -60,7 +60,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 					try:
 						container.seek(seek_us)
 						for frame in container.decode(stream):
-							reqObjImage = frame.to_image()
+							reqObjImage = frame.to_image() # type: ignore
 							break
 					except Exception:
 						continue
@@ -81,12 +81,12 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 		# make a thumbnail
 		try:
 			if reqObjImage:
-				img = reqObjImage
+				img = reqObjImage # type: ignore
 			elif reqObjBytes:
 				img = Image.open(reqObjBytes)
 			else:
 				img  = Image.open(reqObj)
-			img  = ImageOps.exif_transpose(img)
+			img  = ImageOps.exif_transpose(img) # type: ignore
 			text = f'{file_extension}  {img.size[0]} x {img.size[1]}'
 
 			# convert to RGB
@@ -100,6 +100,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
 			img.thumbnail(size=tnWidthHeight, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
+			img = img.filter(ImageFilter.UnsharpMask(radius=6, percent=20))
 
 			canvas = Image.new(img.mode, tnWidthHeight, tnColor if img.mode == 'RGB' else 0)
 			left   = (tnWidthHeight[0] - img.size[0]) // 2
@@ -116,7 +117,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
 		except Exception:
 			log(f'Exception at "make a thumbnail": {traceback.format_exc()}')
-			reqObj = 'resources\\Enso.png'
+			reqObj = os.path.join('resources', 'Enso.png')
 			has_alpha = True
 			img  = Image.open(reqObj)
 			text = f'BAD FILE  {file_name}'

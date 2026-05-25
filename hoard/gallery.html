@@ -16,13 +16,17 @@
 		<video id="viewVideo" controls loop></video>
 	</div>
 	<div id="autoPlayButton"></div>
-	<div id="titleContainer"></div>
+	<div id="topBar">
+		<a id="navPrevious">&larr;</a>
+		<a id="navUp">&uarr;</a>
+		<a id="navNext">&rarr;</a>
+		<div id="titleContainer"></div>
+	</div>
 	<div id="thumbnailContainer">
 		<div id="siblings"></div>
 		<div id="children"></div>
 	</div>
-	<div id="navigationContainer"><a id="navPrevious">&larr;</a>&emsp;<a id="navUp">&uarr;</a>&emsp;<a id="navNext">&rarr;</a></div>
-	<div id="directoryContainer"></div>
+	<div id="backToTop">&uarr;</div>
 	<!-- Loads the thumbs object & everything else -->
 	{thumbnailHtml}
 	<script>
@@ -47,6 +51,7 @@
 			dirElms              : {},
 			viewportUnzoomedScale: window.visualViewport.scale,
 			pageScrollYPos       : null,
+			scrolledPixelsWhileBusy: 0,
 			lowestPending        : 0,
 		}
 
@@ -74,7 +79,6 @@
 			const title2 = `${decodeURIComponent(window.location.pathname)} <span style="opacity:0.5">—</span> ${count} ${count === 1 ? 'file' : 'files'}`
 			document.getElementById('titleContainer').innerHTML = title2
 
-			// viewerState.dirUrls.forEach(addDir)
 			viewerState.imgUrls.forEach(thumbs.add)
 
 			buildDirectoryGrid(siblingUrls, viewerState.dirUrls)
@@ -88,7 +92,7 @@
 				np.href = siblingUrls[idx - 1]
 				np.innerText += ' ' + decodeURI(siblingUrls[idx - 1])
 			} else {
-				np.remove()
+				np.classList.add('nav-hidden')
 			}
 
 			const nu = document.getElementById('navUp')
@@ -97,7 +101,7 @@
 				nu.href = viewerState.dirUrls[0]
 				nu.innerText += ' ' + decodeURI(viewerState.dirUrls[0])
 			} else {
-				nu.remove()
+				nu.classList.add('nav-hidden')
 			}
 
 			const nn = document.getElementById('navNext')
@@ -106,7 +110,7 @@
 				nn.href = siblingUrls[idx + 1]
 				nn.innerText = decodeURI(siblingUrls[idx + 1]) + ' ' + nn.innerText
 			} else {
-				nn.remove()
+				nn.classList.add('nav-hidden')
 			}
 
 			vv.onplay    = e => {viewerState.videoState = 'playing'}
@@ -429,18 +433,6 @@
 		}
 		//#endregion
 
-		//#region MARK:load/cache
-		// function addDir(url, i) {
-		// 	let a = document.createElement('a')
-		// 	a.href      = url
-		// 	a.onclick   = navigate // todo: ugh
-		// 	a.innerText = decodeURI(url.split('/').at(-1) || url)
-		// 	a.className = 'dirItem'
-		// 	let c = document.getElementById('directoryContainer')
-		// 	c.appendChild(a)
-		// 	viewerState.dirElms[url] = a
-		// }
-
 		function highlightLastDir() {
 			let lastChild = getCookie('lastChild=')
 			if (!lastChild) return
@@ -530,6 +522,18 @@
 			// vb.onclick = toggleZoom
 			vb.onmouseup = toggleZoom
 
+			document.querySelector('#backToTop').onclick = () => {
+				document.documentElement.scrollTop = 0
+			}
+
+			// prevent accidental dragging of clickable elements
+			[vi, vi2, vi3].forEach((tn) => {
+				tn.ondragstart = (e) => e.preventDefault()
+			})
+			document.querySelectorAll('.tn, a').forEach((tn) => {
+				tn.ondragstart = (e) => e.preventDefault()
+			})
+
 			document.onkeydown = (e) => {
 				// directory navigation
 				if      (e.ctrlKey && e.key == 'ArrowLeft' ) {
@@ -594,7 +598,7 @@
 				// delete
 				else if (e.key == 'Delete' && allowDelete) {
 					const url = viewerState.imgUrls[viewerState.viewedIndex]
-					if (confirm('Delete ' + url + '?')) {
+					if (confirm('Delete ' + decodeURIComponent(url) + '?')) {
 						fetch(url + '?del').then(r => r.text()).then(result => {
 							if (result !== 'ok') { alert('Delete failed: ' + result); return; }
 							let idx = viewerState.viewedIndex
@@ -619,26 +623,32 @@
 
 			//////// horizontal scrolling
 			document.addEventListener('wheel', (e) => {
+				// don't scroll the grid when zoomed
 				if (window.zoomed) e.preventDefault()
+
+				let scrolledPixels = window.zoomed ? e.deltaY : e.deltaX
+
+				viewerState.scrolledPixelsWhileBusy += scrolledPixels
+				console.log(viewerState.scrolledPixelsWhileBusy)
 
 				if (window.busyScrolling) return
 
-				let delta = window.zoomed ? e.deltaY : e.deltaX
-
-				if (delta > 0) {
+				if (viewerState.scrolledPixelsWhileBusy >= 100) {
 					window.busyScrolling = true
 					viewerState.viewedIndex++
 					changeAutoPlay('reset')
 					updateViewed()
-				}
-				if (delta < 0) {
+					console.log('>= 100', viewerState.scrolledPixelsWhileBusy)
+				} else if (viewerState.scrolledPixelsWhileBusy <= -100) {
 					window.busyScrolling = true
 					viewerState.viewedIndex--
 					changeAutoPlay('reset')
 					updateViewed()
+					console.log('<= -100', viewerState.scrolledPixelsWhileBusy)
 				}
 
 				if (window.busyScrolling) {
+					viewerState.scrolledPixelsWhileBusy = 0
 					window.setTimeout(() => {
 						delete window.busyScrolling
 					}, {scrollRateLimitMs})
@@ -711,8 +721,8 @@
 				touchDownY = null
 			}
 
-			document.ontouchstart = handleTouchStart
-			document.ontouchmove  = handleTouchMove
+			document.ontouchstart = handleTouchStart // todo: more viewer state
+			document.ontouchmove  = handleTouchMove  // todo: more viewer state
 		}
 		//#endregion
 
