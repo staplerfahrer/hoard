@@ -22,7 +22,7 @@ def build_response_bytes(req: str) -> bytes:
 	elif req.startswith('/.well-known'):
 		data, mime = b'', 'text/plain'
 
-	elif os.path.isdir(req_server_path):
+	elif req_server_path == fs.VIRTUAL_ROOT or os.path.isdir(req_server_path):
 		data, mime = handle_directory.run(req_server_path)
 
 	elif req_server_path.endswith('?tn'): # remove ?tn

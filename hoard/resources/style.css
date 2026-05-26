@@ -43,6 +43,7 @@ a {
 	backdrop-filter      : blur(4px);
 	min-height           : 60px;
 	gap                  : 10px;
+	padding              : 0 10px;
 	background-color     : #00000030;
 }
 
@@ -103,6 +104,10 @@ a {
 }
 
 #siblings a:hover, #children a:hover {
+	background-color: #ffffff08;
+}
+
+#siblings a.active, #children a.active {
 	background-color: #ffffff10;
 }
 

@@ -30,45 +30,58 @@ def run(server_path: str) -> tuple[bytes, str]:
 		log(f'  {label:<20} {(now - t)*1000: >6.1f} ms')
 		t = now
 
-	# todo: for siblings and children, count the entries:
-	# len(os.listdir(path))
+	all_roots      = fs.roots()                      # [(name, abs_path), ...]
+	all_root_paths = [p for _, p in all_roots]
 
-	# discover directories & files
-	root    = config('root')
-	req_obj = os.path.abspath(server_path)
-	if not (req_obj == root or req_obj.startswith(root + os.sep)):
-		req_obj = root
-	is_root = req_obj == root
-	parent_path = [os.path.abspath(os.path.join(req_obj, '..'))] if not is_root else []
-	tick('abspath/isRoot')
+	# ── Case 1: virtual root "/" ─────────────────────────────────────────────
+	if server_path == fs.VIRTUAL_ROOT:
+		client_children = [fs.to_client_path(p) for _, p in all_roots]
+		img_urls        = []
+		client_siblings = []
+		tick('virtual root')
 
-	with os.scandir(req_obj) as itr:
-		objs = list(itr)
-	tick('scandir')
+	else:
+		# ── security: stay within configured roots ───────────────────────────
+		req_obj = os.path.abspath(server_path)
+		in_any_root = any(
+			req_obj == rp or req_obj.startswith(rp + os.sep)
+			for rp in all_root_paths
+		)
+		if not in_any_root:
+			return run(fs.VIRTUAL_ROOT)
+		tick('abspath/security')
 
-	objs = [o for o in objs if not _is_blocked(o.path)]
+		# scan current directory
+		with os.scandir(req_obj) as itr:
+			objs = [o for o in itr if not _is_blocked(o.path)]
+		tick('scandir')
 
-	children_list = [os.path.join(req_obj, d.name) for d in objs if d.is_dir()]
-	tick('children_list')
+		children_list   = sorted([o.path for o in objs if o.is_dir()], key=_sort_key)
+		file_list       = sorted([o.path for o in objs if o.is_file()], key=_sort_key)
+		tick('children/files')
 
-	file_list   = [os.path.join(req_obj, f.name) for f in objs if f.is_file()]
-	tick('file_list')
+		# children always have '..' (parent is real dir or virtual root)
+		client_children = ['..'] + [fs.to_client_path(d) for d in children_list]
+		img_urls        = [fs.to_client_path(f) for f in file_list]
+		tick('client_children/imgUrls')
 
-	server_children = sorted(children_list, key=_sort_key)
-	tick('server_children')
-	client_children = [fs.to_client_path(d) for d in server_children]
-	if not is_root:
-		client_children = ['..'] + client_children
-	tick('client_children')
+		# ── Case 2: at a configured root dir — siblings = other roots ────────
+		if req_obj in all_root_paths:
+			client_siblings = ['..'] + [
+				fs.to_client_path(p) for _, p in all_roots
+			]
 
-	img_urls = [fs.to_client_path(f) for f in sorted(file_list, key=_sort_key)]
-	tick('imgUrls')
+		# ── Case 3: normal subdir — scan real parent ─────────────────────────
+		else:
+			parent = os.path.abspath(os.path.join(req_obj, '..'))
+			with os.scandir(parent) as parent_itr:
+				client_siblings = ['..'] + [
+					fs.to_client_path(e.path)
+					for e in sorted(parent_itr, key=lambda e: _sort_key(e.path))
+					if e.is_dir() and not _is_blocked(e.path)
+				]
 
-	client_siblings: list[str] = []
-	if not is_root:
-		with os.scandir(parent_path[0]) as parent_itr:
-			client_siblings = ['..'] + [fs.to_client_path(e.path) for e in sorted(parent_itr, key=lambda e: _sort_key(e.path)) if e.is_dir()]
-	tick('client_siblings')
+		tick('client_siblings')
 
 	# produce HTML
 	gallery_html = fs.read_file_bytes('gallery.html')[0]

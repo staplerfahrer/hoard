@@ -37,13 +37,36 @@ def dcraw_extract(server_path: str) -> bytes | None:
 	return result.stdout if result.returncode == 0 and result.stdout else None
 
 
+VIRTUAL_ROOT = '\x00'  # sentinel for the synthetic "/" directory (no real fs path)
+
+
+def roots() -> list[tuple[str, str]]:
+	"""Return [(name, abs_path), ...] from config 'roots'."""
+	return [(r['name'], os.path.abspath(r['path'])) for r in config('roots')]
+
+
 def to_client_path(file_path: str) -> str:
-	url = file_path.replace(config('root'), '').replace(os.sep, '/')
-	return urlparse.quote(url, safe='/,') if url else '/'
+	abs_path = os.path.abspath(file_path)
+	for name, root_path in roots():
+		if abs_path == root_path:
+			return '/' + urlparse.quote(name, safe='')
+		if abs_path.startswith(root_path + os.sep):
+			rel = abs_path[len(root_path):].replace(os.sep, '/')
+			return urlparse.quote(f'/{name}{rel}', safe='/,')
+	return '/'
 
 
 def to_server_path(url: str) -> str:
-	return config('root') + url.replace('/', os.sep)
+	"""Translate a URL path to a filesystem path, or VIRTUAL_ROOT for '/'."""
+	if url == '/':
+		return VIRTUAL_ROOT
+	parts = url.lstrip('/').split('/', 1)
+	root_name = urlparse.unquote(parts[0])
+	rest      = parts[1] if len(parts) > 1 else ''
+	for name, root_path in roots():
+		if name == root_name:
+			return root_path + (os.sep + rest.replace('/', os.sep) if rest else '')
+	return VIRTUAL_ROOT  # unknown root name → fall back to virtual root
 
 
 def read_file_bytes(file_name: str, range_l: int | None = None, range_u: int | None = None) \

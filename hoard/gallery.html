@@ -454,7 +454,7 @@
 				a.onclick   = navigate // todo: ugh
 				a.innerText = decodeURI(url.split('/').at(-1) || url)
 				if (url === window.location.pathname) {
-					a.innerText = `⇝ ${a.innerText}`
+					a.classList.add('active')
 				}
 				return a
 			}
@@ -469,7 +469,7 @@
 			cbox.append(...chlns)
 
 			sbox.childNodes.forEach(c => {
-				if (c.innerText[0] !== '⇝') return
+				if (c.classList.contains('active')) return
 				c.parentElement.scrollTop = Math.max(
 					c.offsetTop - c.parentElement.offsetTop - (c.parentElement.clientHeight / 2 - c.clientHeight),
 					0)

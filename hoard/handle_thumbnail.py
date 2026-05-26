@@ -37,14 +37,14 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 	t0 = time.perf_counter()
 	try:
 		log(f'handle_thumbnail {serverPath}')
-		tnWidthHeight = config('thumbnailWidthHeight')
-		tnColor = config('thumbBackgroundColor')
-		reqObj  = serverPath[:-3]
-		file_name = os.path.split(reqObj)[-1:][0]
+		tnWidthHeight  = config('thumbnailWidthHeight')
+		tnColor        = config('thumbBackgroundColor')
+		reqObj         = serverPath[:-3]
+		file_name      = os.path.split(reqObj)[-1:][0]
 		file_extension = os.path.splitext(reqObj)[1][1:].upper()
 
-		reqObjBytes: io.BytesIO | None      = None
-		reqObjImage: Image.Image | None     = None
+		reqObjBytes: io.BytesIO | None  = None
+		reqObjImage: Image.Image | None = None
 
 		# if video, extract a frame via PyAV (in-process, no subprocess)
 		try:
@@ -87,7 +87,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			else:
 				img  = Image.open(reqObj)
 			img  = ImageOps.exif_transpose(img) # type: ignore
-			text = f'{file_extension}  {img.size[0]} x {img.size[1]}'
+			text_left  = file_name
+			text_right = f'{img.size[0]} x {img.size[1]}'
 
 			# convert to RGB
 			if img.mode in ['P', 'CMYK']:
@@ -106,12 +107,15 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			left   = (tnWidthHeight[0] - img.size[0]) // 2
 			top    = (tnWidthHeight[1] - img.size[1]) // 2
 			canvas.paste(img, (left, top))
-			draw   = ImageDraw.Draw(canvas)
-			font   = ImageFont.load_default()
-			text_box = draw.textbbox((0, 0), text, font=font)
-			tw, th = text_box[2] - text_box[0], text_box[3] - text_box[1]
+			draw       = ImageDraw.Draw(canvas)
+			font       = ImageFont.load_default(size=12)
 			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
-			draw.text((tnWidthHeight[0] - tw - 2, tnWidthHeight[1] - th - 5), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			lb = draw.textbbox((0, 0), text_left,  font=font)
+			rb = draw.textbbox((0, 0), text_right, font=font)
+			lh = lb[3] - lb[1]
+			rw, rh = rb[2] - rb[0], rb[3] - rb[1]
+			draw.text((3,                         tnWidthHeight[1] - lh - 6), text_left,  font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			draw.text((tnWidthHeight[0] - rw - 3, tnWidthHeight[1] - rh - 6), text_right, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
@@ -120,7 +124,6 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			reqObj = os.path.join('resources', 'Enso.png')
 			has_alpha = True
 			img  = Image.open(reqObj)
-			text = f'BAD FILE  {file_name}'
 
 			img.thumbnail(size=tnWidthHeight)
 
@@ -128,12 +131,13 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			left   = (tnWidthHeight[0] - img.size[0]) // 2
 			top    = (tnWidthHeight[1] - img.size[1]) // 2
 			canvas.paste(img, (left, top))
-			draw   = ImageDraw.Draw(canvas)
-			font   = ImageFont.load_default()
-			text_box = draw.textbbox((0, 0), text, font=font)
-			tw, th = text_box[2] - text_box[0], text_box[3] - text_box[1]
+			draw       = ImageDraw.Draw(canvas)
+			font       = ImageFont.load_default(size=12)
 			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
-			draw.text((tnWidthHeight[0] - tw - 2, tnWidthHeight[1] - th - 5), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			text       = f'BAD FILE  {file_name}'
+			tb = draw.textbbox((0, 0), text, font=font)
+			tw, th = tb[2] - tb[0], tb[3] - tb[1]
+			draw.text((3, tnWidthHeight[1] - th - 6), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
 
 		buf = io.BytesIO()
 		if has_alpha:

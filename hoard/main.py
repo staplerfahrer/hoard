@@ -3,7 +3,6 @@ from shutil import get_terminal_size
 from socket import create_server, socket
 from time import sleep, perf_counter
 import os
-import subprocess
 import sys
 import threading
 import time
@@ -59,7 +58,7 @@ def main():
 		os.system('cls' if WINDOWS else 'clear')
 		check_dependencies()
 		if config('autoStart'):
-			webbrowser.open('http://127.0.0.1')
+			webbrowser.open(f'http://{config("address")}:{config("port")}')
 
 		# UI thread
 		threading.Thread(
@@ -169,15 +168,14 @@ def ui():
 		name='Hotkey Listener',
 		daemon=True).start()
 
-	cols = get_terminal_size().columns
 	sec_per_frame = 1 / 60
 	last_rq = 0
 	req_sec_avg = 0
 	while True:
 		sleep(sec_per_frame)
-		cols = get_terminal_size().columns
+		cols  = get_terminal_size().columns - 1
 		title = f' hoard Media Gallery serving at http://{config("address")}:{config("port")} '
-		pad = (cols - len(title)) // 2
+		pad   = (cols - len(title)) // 2
 		title = f'{"=" * pad}{title}{"=" * pad}'
 		request_queue = len(queue) + len(thumbnail_queue)
 		with busy_thread_lock:
@@ -218,21 +216,21 @@ def hotkey_listener():
 			return
 		import tty, termios, select as _select
 		fd           = sys.stdin.fileno()
-		old_settings = termios.tcgetattr(fd)
+		old_settings = termios.tcgetattr(fd)                                    # type: ignore
 		try:
-			tty.setraw(fd)
+			tty.setraw(fd)                                                      # type: ignore
 			while True:
 				ready, _, _ = _select.select([sys.stdin], [], [], 0.05)
 				if ready:
 					ch = sys.stdin.read(1)
 					if ch == '\x12':  # Ctrl+R
-						termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+						termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)  # type: ignore
 						log('Restarting...')
 						os.execv(sys.executable, [sys.executable] + sys.argv)
 		except Exception:
 			pass
 		finally:
-			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)              # type: ignore
 
 
 if __name__ == '__main__':
