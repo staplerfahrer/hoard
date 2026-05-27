@@ -72,11 +72,13 @@
 		autoPlayButton = document.getElementById('autoPlayButton')
 
 		function buildDom() {
-			const title1 = `hoard ${viewerState.imgUrls.length} ${decodeURIComponent(window.location.pathname)}`
+			const beautifyLabel = (l) => l.replace(/^\//, '♦ ').replaceAll('/', ' 〉 ')
+			const currentPathLabel = beautifyLabel(decodeURIComponent(window.location.pathname))
+			const title1 = `hoard ${viewerState.imgUrls.length} ${currentPathLabel}`
 			document.title = title1
 
 			const count = viewerState.imgUrls.length
-			const title2 = `${decodeURIComponent(window.location.pathname)} <span style="opacity:0.5">—</span> ${count} ${count === 1 ? 'file' : 'files'}`
+			const title2 = `${currentPathLabel} <span style="opacity:0.5">—</span> ${count} ${count === 1 ? 'file' : 'files'}`
 			document.getElementById('titleContainer').innerHTML = title2
 
 			viewerState.imgUrls.forEach(thumbs.add)
@@ -90,7 +92,7 @@
 			if (idx > 0) {
 				np.onclick = ()=>{navigateTo(siblingUrls[idx - 1]); return false}
 				np.href = siblingUrls[idx - 1]
-				np.innerText += ' ' + decodeURI(siblingUrls[idx - 1])
+				np.innerText += ' ' + beautifyLabel(decodeURI(siblingUrls[idx - 1]))
 			} else {
 				np.classList.add('nav-hidden')
 			}
@@ -99,7 +101,7 @@
 			if (cur !== '/') {
 				nu.onclick = ()=>{navigateTo(viewerState.dirUrls[0]); return false}
 				nu.href = viewerState.dirUrls[0]
-				nu.innerText += ' ' + decodeURI(viewerState.dirUrls[0])
+				nu.innerText += ' ' + beautifyLabel(decodeURI(viewerState.dirUrls[0]))
 			} else {
 				nu.classList.add('nav-hidden')
 			}
@@ -108,7 +110,7 @@
 			if (idx !== -1 && idx < siblingUrls.length - 1) {
 				nn.onclick = ()=>{navigateTo(siblingUrls[idx + 1]); return false}
 				nn.href = siblingUrls[idx + 1]
-				nn.innerText = decodeURI(siblingUrls[idx + 1]) + ' ' + nn.innerText
+				nn.innerText = beautifyLabel(decodeURI(siblingUrls[idx + 1])) + ' ' + nn.innerText
 			} else {
 				nn.classList.add('nav-hidden')
 			}
@@ -469,7 +471,7 @@
 			cbox.append(...chlns)
 
 			sbox.childNodes.forEach(c => {
-				if (c.classList.contains('active')) return
+				if (!c.classList.contains('active')) return
 				c.parentElement.scrollTop = Math.max(
 					c.offsetTop - c.parentElement.offsetTop - (c.parentElement.clientHeight / 2 - c.clientHeight),
 					0)
