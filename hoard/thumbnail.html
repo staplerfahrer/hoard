@@ -43,7 +43,7 @@
 				ports[i % ports.length]}${
 				url}?tn`)
 			img.setAttribute('src', '/thumbnail-placeholder.png')
-			img.onclick = toggleZoom
+			img.onclick = url.toLowerCase().endsWith('.pdf') ? () => window.open(url, '_blank') : toggleZoom
 			const par = document.getElementById('thumbnailContainer')
 			par.appendChild(img)
 			viewerState.imgElms.push(img)

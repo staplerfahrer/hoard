@@ -25,11 +25,12 @@ MIME: dict[str, str] = {
 	'.m4a' : 'audio/mp4',
 	'.ogg' : 'audio/ogg',
 	'.wav' : 'audio/wav',
+	'.pdf' : 'application/pdf',
 }
 
 RAW_EXTS = frozenset({'.crw', '.cr2'})
 
-NON_IMAGE_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm', '.mp3', '.m4a', '.ogg', '.wav'})
+NON_IMAGE_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm', '.mp3', '.m4a', '.ogg', '.wav', '.pdf'})
 
 def dcraw_extract(server_path: str) -> bytes | None:
 	exe = os.path.join('resources', 'dcraw.exe') if WINDOWS else 'dcraw'

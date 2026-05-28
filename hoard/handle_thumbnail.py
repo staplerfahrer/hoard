@@ -78,6 +78,19 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 				if raw_bytes:
 					reqObjBytes = io.BytesIO(raw_bytes)
 
+		# for PDF files, render page 0 via PyMuPDF
+		pdf_page_count: int | None = None
+		if not reqObjImage and reqObj.lower().endswith('.pdf'):
+			try:
+				import fitz  # PyMuPDF
+				doc = fitz.open(reqObj)
+				pdf_page_count = len(doc)
+				pix = doc[0].get_pixmap(matrix=fitz.Matrix(2.0, 2.0), colorspace=fitz.csRGB)
+				reqObjImage = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+				doc.close()
+			except Exception:
+				log(f'Exception at "pdf thumbnail": {traceback.format_exc()}')
+
 		# make a thumbnail
 		try:
 			if reqObjImage:
@@ -88,7 +101,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 				img  = Image.open(reqObj)
 			img  = ImageOps.exif_transpose(img) # type: ignore
 			text_left  = file_name
-			text_right = f'{img.size[0]} x {img.size[1]}'
+			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
 
 			# convert to RGB
 			if img.mode in ['P', 'CMYK']:
@@ -134,7 +147,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			draw       = ImageDraw.Draw(canvas)
 			font       = ImageFont.load_default(size=12)
 			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
-			text       = f'BAD FILE  {file_name}'
+			text       = f'Can\'t render {file_name}'
 			tb = draw.textbbox((0, 0), text, font=font)
 			tw, th = tb[2] - tb[0], tb[3] - tb[1]
 			draw.text((3, tnWidthHeight[1] - th - 6), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
