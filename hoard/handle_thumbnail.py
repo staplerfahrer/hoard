@@ -127,8 +127,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			rb = draw.textbbox((0, 0), text_right, font=font)
 			lh = lb[3] - lb[1]
 			rw, rh = rb[2] - rb[0], rb[3] - rb[1]
-			draw.text((3,                         tnWidthHeight[1] - lh - 6), text_left,  font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
-			draw.text((tnWidthHeight[0] - rw - 3, tnWidthHeight[1] - rh - 6), text_right, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			draw.text((5,                         tnWidthHeight[1] - 18), text_left,  font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			draw.text((tnWidthHeight[0] - rw - 5, tnWidthHeight[1] - 18), text_right, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
@@ -150,7 +150,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			text       = f'Can\'t render {file_name}'
 			tb = draw.textbbox((0, 0), text, font=font)
 			tw, th = tb[2] - tb[0], tb[3] - tb[1]
-			draw.text((3, tnWidthHeight[1] - th - 6), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			draw.text((5, tnWidthHeight[1] - 18), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
 
 		buf = io.BytesIO()
 		if has_alpha:

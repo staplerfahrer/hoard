@@ -9,6 +9,9 @@ import time
 import traceback
 import webbrowser
 
+from pillow_heif import register_heif_opener
+register_heif_opener()
+
 from config import config, WINDOWS
 from log import log
 import handle_request

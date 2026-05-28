@@ -26,6 +26,8 @@ MIME: dict[str, str] = {
 	'.ogg' : 'audio/ogg',
 	'.wav' : 'audio/wav',
 	'.pdf' : 'application/pdf',
+	'.heic': 'image/heic',
+	'.heif': 'image/heif',
 }
 
 RAW_EXTS = frozenset({'.crw', '.cr2'})

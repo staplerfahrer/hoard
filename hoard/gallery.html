@@ -14,6 +14,7 @@
 		<img id="viewImg2">
 		<img id="viewImg3">
 		<video id="viewVideo" controls loop></video>
+		<iframe id="viewPdf" style="display:none;width:100%;height:100%;border:none;"></iframe>
 	</div>
 	<div id="autoPlayButton"></div>
 	<div id="topBar">
@@ -36,6 +37,7 @@
 		let vi2            = null // viewImage (back buffer, preloads next)
 		let vi3            = null // viewImage (back buffer, preloads prev)
 		let vv             = null // viewVideo
+		let vpdf           = null // viewPdf iframe
 		let autoPlayButton = null
 
 		// UI state
@@ -69,6 +71,7 @@
 		vi3 = document.getElementById('viewImg3')
 		vi3.style.display = 'none'
 		vv = document.getElementById('viewVideo')
+		vpdf = document.getElementById('viewPdf')
 		autoPlayButton = document.getElementById('autoPlayButton')
 
 		function buildDom() {
@@ -213,6 +216,10 @@
 				}, 500)
 				vv.style.display = 'none'
 
+				// viewPdf
+				vpdf.style.display = 'none'
+				vpdf.src = ''
+
 				delete window.zoomed
 				changeAutoPlay('disable')
 				return
@@ -227,6 +234,15 @@
 				let clickedImg = e.target
 				viewerState.viewedIndex = Number(clickedImg.getAttribute('data-index'))
 			}
+
+			viewerState.imgElms.forEach(img => {
+				if (img._requested && !img._loaded) {
+					img.src = '/thumbnail-placeholder.png'
+					img.classList.add('tn-loading')
+					img._requested = false
+				}
+			})
+			viewerState.lowestPending = 0
 
 			window.zoomed = true
 			vb.style.visibility = 'visible'
@@ -304,8 +320,15 @@
 
 			// update & display
 			let url = viewerState.imgUrls[viewerState.viewedIndex]
-			if (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ts')) {
+			if (url.toLowerCase().endsWith('.pdf')) {
+				// pdf
+				vv.style.display = 'none'
+				vi.style.display = 'none'
+				vpdf.src = url
+				vpdf.style.display = ''
+			} else if (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ts')) {
 				// video
+				vpdf.style.display = 'none'
 				// https://stackoverflow.com/questions/5235145/changing-source-on-html5-video-tag
 				vv.style.display = 'inline-block'
 				let vvSources = vv.getElementsByTagName('source')
@@ -323,6 +346,7 @@
 				}
 				vv.play()
 			} else {
+				vpdf.style.display = 'none'
 				// picture — triple-buffered to avoid flicker in both directions
 				const absUrl = new URL(url, location.href).href
 				const vi2Hit = vi2.complete && vi2.naturalWidth > 0 && vi2.src === absUrl
@@ -538,15 +562,18 @@
 
 			document.onkeydown = (e) => {
 				// directory navigation
-				if      (e.ctrlKey && e.key == 'ArrowLeft' ) {
+				if      (e.ctrlKey && e.key == 'ArrowUp'   ) {
 					const cur = window.location.pathname;
 					const idx = siblingUrls.indexOf(cur)
 					if (idx > 0) navigateTo(siblingUrls[idx - 1])
 				}
-				else if (e.ctrlKey && e.key == 'ArrowUp'   ) {
+				else if (e.ctrlKey && e.key == 'ArrowLeft' ) {
 					navigateTo(viewerState.dirUrls[0])
 				}
 				else if (e.ctrlKey && e.key == 'ArrowRight') {
+					if (viewerState.dirUrls.length > 1) navigateTo(viewerState.dirUrls[1])
+				}
+				else if (e.ctrlKey && e.key == 'ArrowDown' ) {
 					const cur = window.location.pathname;
 					const idx = siblingUrls.indexOf(cur)
 					if (idx !== -1 && idx < siblingUrls.length - 1) navigateTo(siblingUrls[idx + 1])
