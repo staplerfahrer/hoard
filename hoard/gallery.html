@@ -75,7 +75,7 @@
 		autoPlayButton = document.getElementById('autoPlayButton')
 
 		function buildDom() {
-			const beautifyLabel = (l) => l.replace(/^\//, '♦ ').replaceAll('/', ' 〉 ')
+			const beautifyLabel = (l) => l.replace(/^\//, '').replaceAll('/', '▹')
 			const currentPathLabel = beautifyLabel(decodeURIComponent(window.location.pathname))
 			const title1 = `hoard ${viewerState.imgUrls.length} ${currentPathLabel}`
 			document.title = title1

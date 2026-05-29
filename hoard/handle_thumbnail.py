@@ -1,7 +1,7 @@
 import io
 import os
 # pip install types-Pillow to fix Pylance
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter, ImageColor
 import av
 import threading
 import time
@@ -38,10 +38,9 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 	try:
 		log(f'handle_thumbnail {serverPath}')
 		tnWidthHeight  = config('thumbnailWidthHeight')
-		tnColor        = config('thumbBackgroundColor')
+		tnColor        = ImageColor.getrgb(config('thumbBackgroundColor'))
 		reqObj         = serverPath[:-3]
 		file_name      = os.path.split(reqObj)[-1:][0]
-		file_extension = os.path.splitext(reqObj)[1][1:].upper()
 
 		reqObjBytes: io.BytesIO | None  = None
 		reqObjImage: Image.Image | None = None
@@ -85,8 +84,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 				import fitz  # PyMuPDF
 				doc = fitz.open(reqObj)
 				pdf_page_count = len(doc)
-				pix = doc[0].get_pixmap(matrix=fitz.Matrix(2.0, 2.0), colorspace=fitz.csRGB)
-				reqObjImage = Image.frombytes('RGB', [pix.width, pix.height], pix.samples)
+				pix = doc[0].get_pixmap(matrix=fitz.Matrix(2.0, 2.0), colorspace=fitz.csRGB) # type: ignore
+				reqObjImage = Image.frombytes('RGB', (pix.width, pix.height), pix.samples) # type: ignore
 				doc.close()
 			except Exception:
 				log(f'Exception at "pdf thumbnail": {traceback.format_exc()}')
@@ -98,37 +97,48 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			elif reqObjBytes:
 				img = Image.open(reqObjBytes)
 			else:
-				img  = Image.open(reqObj)
-			img  = ImageOps.exif_transpose(img) # type: ignore
-			text_left  = file_name
-			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
+				img = Image.open(reqObj)
+			img = ImageOps.exif_transpose(img) # type: ignore
 
-			# convert to RGB
-			if img.mode in ['P', 'CMYK']:
+			# convert to RGBA
+			if img.mode != 'RGB':
 				img = img.convert('RGB')
-			if img.mode in ['PA', 'LA']:
-				img = img.convert('RGBA')
-			has_alpha = img.mode in ('RGBA', 'LA', 'PA') or \
-				(img.mode == 'P' and 'transparency' in img.info)
+			has_alpha = False
 
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
 			img.thumbnail(size=tnWidthHeight, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
 			img = img.filter(ImageFilter.UnsharpMask(radius=6, percent=20))
 
-			canvas = Image.new(img.mode, tnWidthHeight, tnColor if img.mode == 'RGB' else 0)
-			left   = (tnWidthHeight[0] - img.size[0]) // 2
-			top    = (tnWidthHeight[1] - img.size[1]) // 2
-			canvas.paste(img, (left, top))
-			draw       = ImageDraw.Draw(canvas)
+			canvas  = Image.new(img.mode, tnWidthHeight, tnColor)
+			tn_left = (tnWidthHeight[0] - img.size[0]) // 2
+			tn_top  = (tnWidthHeight[1] - img.size[1]) // 2
+			canvas.paste(img, (tn_left, tn_top))
+
+			text_left  = file_name
+			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
+			draw       = ImageDraw.Draw(canvas, 'RGBA')
 			font       = ImageFont.load_default(size=12)
-			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
 			lb = draw.textbbox((0, 0), text_left,  font=font)
 			rb = draw.textbbox((0, 0), text_right, font=font)
-			lh = lb[3] - lb[1]
-			rw, rh = rb[2] - rb[0], rb[3] - rb[1]
-			draw.text((5,                         tnWidthHeight[1] - 18), text_left,  font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
-			draw.text((tnWidthHeight[0] - rw - 5, tnWidthHeight[1] - 18), text_right, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+
+			box_color = tnColor + (90,)
+			lw = lb[2] - lb[0]
+			rw = rb[2] - rb[0]
+			text_x = 5
+			text_y = tnWidthHeight[1] - 18
+			draw.rectangle((0                                 , text_y - 1, text_x + lw + 2 , tnWidthHeight[1]), fill=box_color)
+			draw.rectangle((tnWidthHeight[0] - rw - text_x - 2, text_y - 1, tnWidthHeight[0], tnWidthHeight[1]), fill=box_color)
+
+			font_color = (191, 191, 191, 255)
+			shadow_color = (0, 0, 0, 255)
+			x, y = text_x, text_y
+			text_outline(draw, x, y, text_left, font, shadow_color)
+			draw.text((x, y), text_left,  font=font, fill=font_color)
+
+			x, y = tnWidthHeight[0] - rw - text_x, text_y
+			text_outline(draw, x, y, text_right, font, shadow_color)
+			draw.text((x, y), text_right, font=font, fill=font_color)
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
@@ -141,16 +151,15 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			img.thumbnail(size=tnWidthHeight)
 
 			canvas = Image.new(img.mode, tnWidthHeight, 0)
-			left   = (tnWidthHeight[0] - img.size[0]) // 2
-			top    = (tnWidthHeight[1] - img.size[1]) // 2
-			canvas.paste(img, (left, top))
+			tn_left   = (tnWidthHeight[0] - img.size[0]) // 2
+			tn_top    = (tnWidthHeight[1] - img.size[1]) // 2
+			canvas.paste(img, (tn_left, tn_top))
 			draw       = ImageDraw.Draw(canvas)
+
 			font       = ImageFont.load_default(size=12)
 			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
 			text       = f'Can\'t render {file_name}'
-			tb = draw.textbbox((0, 0), text, font=font)
-			tw, th = tb[2] - tb[0], tb[3] - tb[1]
-			draw.text((5, tnWidthHeight[1] - 18), text, font=font, fill=font_color) # pyright: ignore[reportUnknownMemberType]
+			draw.text((5, tnWidthHeight[1] - 18), text, font=font, fill=font_color)
 
 		buf = io.BytesIO()
 		if has_alpha:
@@ -158,7 +167,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			log('returning png')
 			result: tuple[bytes, str] = (buf.getvalue(), 'image/png')
 		else:
-			canvas.save(buf, format='jpeg', quality=90, optimize=False, progressive=True, subsampling=1)
+			canvas.save(buf, format='jpeg', quality=95, optimize=False, progressive=True, subsampling=1)
 			log('returning jpeg')
 			result = (buf.getvalue(), 'image/jpeg')
 
@@ -173,3 +182,9 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 		with _lock:
 			_active_count -= 1
 
+def text_outline(draw: ImageDraw.ImageDraw, x: int, y: int, text: str,
+				 font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+				 color: tuple[int, int, int, int]):
+	for y1 in range(-1, 2):
+		for x1 in range(-1, 2):
+			draw.text((x+x1, y+y1), text,  font=font, fill=color)
