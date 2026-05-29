@@ -635,7 +635,7 @@
 				// delete
 				else if (e.key == 'Delete' && allowDelete) {
 					const url = viewerState.imgUrls[viewerState.viewedIndex]
-					if (confirm('Delete ' + decodeURIComponent(url) + '?')) {
+					if (confirm('Mark this file for deletion?\n\n' + decodeURIComponent(url).split('/').at(-1))) {
 						fetch(url + '?del').then(r => r.text()).then(result => {
 							if (result !== 'ok') { alert('Delete failed: ' + result); return; }
 							let idx = viewerState.viewedIndex

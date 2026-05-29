@@ -44,7 +44,7 @@ a {
 	grid-template-columns: 1fr 1fr 1fr 3fr;
 	align-items          : center;
 	z-index              : 8;
-	backdrop-filter      : blur(4px);
+	backdrop-filter      : blur(12px);
 	min-height           : 60px;
 	gap                  : 10px;
 	padding              : 0 10px;
@@ -131,7 +131,7 @@ a {
 @keyframes tn-fade-in {
 	0%   { opacity: 0%; }
 	10%  { opacity: 0%; }
-	100% { opacity: 75%; }
+	100% { opacity: 85%; }
 }
 
 .tn-fade-in {
@@ -140,14 +140,15 @@ a {
 }
 
 .tn {
-	opacity       : 75%;
-	color         : white;
-	outline-color : transparent;
-	outline-style : solid;
-	outline-offset: -4px;
-	outline-width : 8px;
-	mask-image    : url(/viewer-mask.png);
-	mask-size     : 100% 100%;
+	opacity        : 85%;
+	color          : white;
+	outline-color  : transparent;
+	outline-style  : solid;
+	outline-offset : -4px;
+	outline-width  : 8px;
+	mask-image     : url(/viewer-mask.png);
+	mask-size      : 100% 100%;
+	backdrop-filter: blur(12px);
 }
 
 #thumbnailContainer {
@@ -173,7 +174,7 @@ a {
 	width           : 400px;
 	margin          : 20px auto;
 	padding         : 10px;
-	background-color: #00000030;
+	background-color: #00000060;
 	border-radius   : 3px;
 	outline-style   : solid;
 	outline-offset  : 0;
@@ -181,6 +182,7 @@ a {
 	outline-color   : transparent;
 	color           : #c09300;
 	text-align      : center;
+	backdrop-filter : blur(12px);
 }
 
 

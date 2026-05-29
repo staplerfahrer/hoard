@@ -17,10 +17,24 @@ from log import log
 import handle_request
 import stats
 
-THREAD_COUNT = 30
+# TODO: index all file names in the library on startup (walk the root dirs, store
+#       relative paths in a list/trie) and expose a search endpoint; add a search
+#       box to the gallery UI that queries it and navigates to matches.
+# TODO: add per-file flags (selected / rejected / none); persist via sidecar or
+#       rename suffix; expose set/clear endpoint; show flag state in the viewer UI.
+# TODO: store user-generated metadata (flags, notes, etc.) in a notes.txt file
+#       per directory; create/update the file only when a directory has metadata.
+# TODO: manual zoom (scroll wheel / pinch) and drag-to-pan for the image viewer.
+# TODO: allow renaming of images from the viewer UI; expose a rename endpoint.
+# TODO: allow moving images to another directory from the viewer UI; expose a move endpoint.
+# TODO: allow setting a password on specific directories; prompt for it on first access and store auth in a session cookie.
+# TODO: create a set of mask images for common aspect ratios (1:1, 4:3, 16:9, 3:2, etc.) and apply them as CSS mask-image on thumbnails to soften edges.
+# TODO: fix pixel dimensions reported for RAW files (currently reads dcraw output dimensions, which may reflect the thumbnail rather than the full sensor resolution).
 # TODO: MRU in cookie
 # TODO: fix video player full-screen
 # TODO: fix video player keyboard seek
+
+THREAD_COUNT = 30
 
 # The thumbnails for every image are already loaded in the browser cache — addImg loaded them to build the gallery. In
 #   updateViewed, instead of immediately hiding vi while the full-res fetches, we could set vi.src to the thumbnail URL
@@ -29,9 +43,7 @@ THREAD_COUNT = 30
 #   The one complication: vi.onload = zoomStyle uses vi.naturalWidth/Height for the zoom animation, so we'd need to
 #   suppress it for the thumbnail swap and only let it fire for the full-res. A simple boolean flag handles that.
 
-#   A secondary win while we're there: cacheNext only pre-caches forward (+1 to +10) with a 2-second delay — ArrowLeft is
-#   never pre-cached, and the delay means ArrowRight only benefits if you paused. Reducing that delay to ~100ms and adding
-#    one step backward would help a lot too.
+
 
 queue            : deque[tuple[socket, str]] = deque()
 thumbnail_queue  : deque[tuple[socket, str]] = deque()
