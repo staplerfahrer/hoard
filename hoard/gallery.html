@@ -336,6 +336,9 @@
 				// video
 				vpdf.style.display = 'none'
 				vclose.style.display = 'none'
+				// hide the image buffer so it doesn't show beside the video
+				vi.style.display = 'none'
+				vi.classList.remove('slowZoom')
 				// https://stackoverflow.com/questions/5235145/changing-source-on-html5-video-tag
 				vv.style.display = 'inline-block'
 				let vvSources = vv.getElementsByTagName('source')
@@ -355,6 +358,9 @@
 			} else {
 				vpdf.style.display = 'none'
 				vclose.style.display = 'none'
+				// hide the video so it doesn't show beside the image
+				vv.pause()
+				vv.style.display = 'none'
 				// picture — triple-buffered to avoid flicker in both directions
 				const absUrl = new URL(url, location.href).href
 				const vi2Hit = vi2.complete && vi2.naturalWidth > 0 && vi2.src === absUrl
@@ -666,7 +672,6 @@
 				let scrolledPixels = window.zoomed ? e.deltaY : e.deltaX
 
 				viewerState.scrolledPixelsWhileBusy += scrolledPixels
-				console.log(viewerState.scrolledPixelsWhileBusy)
 
 				if (window.busyScrolling) return
 
@@ -675,13 +680,11 @@
 					viewerState.viewedIndex++
 					changeAutoPlay('reset')
 					updateViewed()
-					console.log('>= 100', viewerState.scrolledPixelsWhileBusy)
 				} else if (viewerState.scrolledPixelsWhileBusy <= -100) {
 					window.busyScrolling = true
 					viewerState.viewedIndex--
 					changeAutoPlay('reset')
 					updateViewed()
-					console.log('<= -100', viewerState.scrolledPixelsWhileBusy)
 				}
 
 				if (window.busyScrolling) {

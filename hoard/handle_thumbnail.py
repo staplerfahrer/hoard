@@ -91,6 +91,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 				log(f'Exception at "pdf thumbnail": {traceback.format_exc()}')
 
 		# make a thumbnail
+		font = ImageFont.load_default(size=12)
 		try:
 			if reqObjImage:
 				img = reqObjImage # type: ignore
@@ -99,77 +100,39 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			else:
 				img = Image.open(reqObj)
 			img = ImageOps.exif_transpose(img) # type: ignore
-
-			# convert to RGBA
 			if img.mode != 'RGB':
 				img = img.convert('RGB')
-			has_alpha = False
 
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
 			img.thumbnail(size=tnWidthHeight, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
 			img = img.filter(ImageFilter.UnsharpMask(radius=6, percent=20))
 
-			canvas  = Image.new(img.mode, tnWidthHeight, tnColor)
-			tn_left = (tnWidthHeight[0] - img.size[0]) // 2
-			tn_top  = (tnWidthHeight[1] - img.size[1]) // 2
-			canvas.paste(img, (tn_left, tn_top))
+			canvas = Image.new('RGB', tnWidthHeight, tnColor)
+			paste_centered(canvas, img)
 
-			text_left  = file_name
 			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
 			draw       = ImageDraw.Draw(canvas, 'RGBA')
-			font       = ImageFont.load_default(size=12)
-			lb = draw.textbbox((0, 0), text_left,  font=font)
-			rb = draw.textbbox((0, 0), text_right, font=font)
-
-			box_color = tnColor + (90,)
-			lw = lb[2] - lb[0]
-			rw = rb[2] - rb[0]
-			text_x = 5
-			text_y = tnWidthHeight[1] - 18
-			draw.rectangle((0                                 , text_y - 1, text_x + lw + 2 , tnWidthHeight[1]), fill=box_color)
-			draw.rectangle((tnWidthHeight[0] - rw - text_x - 2, text_y - 1, tnWidthHeight[0], tnWidthHeight[1]), fill=box_color)
-
-			font_color = (191, 191, 191, 255)
-			shadow_color = (0, 0, 0, 255)
-			x, y = text_x, text_y
-			text_outline(draw, x, y, text_left, font, shadow_color)
-			draw.text((x, y), text_left,  font=font, fill=font_color)
-
-			x, y = tnWidthHeight[0] - rw - text_x, text_y
-			text_outline(draw, x, y, text_right, font, shadow_color)
-			draw.text((x, y), text_right, font=font, fill=font_color)
+			draw_label(draw, tnWidthHeight, font, tnColor, file_name,  'left')
+			draw_label(draw, tnWidthHeight, font, tnColor, text_right, 'right')
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
 		except Exception:
 			log(f'Exception at "make a thumbnail": {traceback.format_exc()}')
-			reqObj = os.path.join('resources', 'Enso.png')
-			has_alpha = True
-			img  = Image.open(reqObj)
+			icon = Image.open(os.path.join('resources', 'Enso.png'))
+			icon.thumbnail(size=tnWidthHeight)
 
-			img.thumbnail(size=tnWidthHeight)
+			canvas = Image.new('RGB', tnWidthHeight, tnColor)
+			paste_centered(canvas, icon, icon if icon.mode == 'RGBA' else None)
 
-			canvas = Image.new(img.mode, tnWidthHeight, 0)
-			tn_left   = (tnWidthHeight[0] - img.size[0]) // 2
-			tn_top    = (tnWidthHeight[1] - img.size[1]) // 2
-			canvas.paste(img, (tn_left, tn_top))
-			draw       = ImageDraw.Draw(canvas)
-
-			font       = ImageFont.load_default(size=12)
-			font_color = (95, 95, 95) if canvas.mode in ('RGB', 'RGBA') else 95
-			text       = f'Can\'t render {file_name}'
-			draw.text((5, tnWidthHeight[1] - 18), text, font=font, fill=font_color)
+			draw = ImageDraw.Draw(canvas, 'RGBA')
+			draw_label(draw, tnWidthHeight, font, tnColor, f'Can\'t render {file_name}', 'left')
 
 		buf = io.BytesIO()
-		if has_alpha:
-			canvas.save(buf, format='png', optimize=False, compress_level=9)
-			log('returning png')
-			result: tuple[bytes, str] = (buf.getvalue(), 'image/png')
-		else:
-			canvas.save(buf, format='jpeg', quality=95, optimize=False, progressive=True, subsampling=1)
-			log('returning jpeg')
-			result = (buf.getvalue(), 'image/jpeg')
+		canvas.save(buf, format='jpeg', quality=95, optimize=False, progressive=True, subsampling=1)
+		log('returning jpeg')
+		result: tuple[bytes, str] = (buf.getvalue(), 'image/jpeg')
 
 		elapsed = time.perf_counter() - t0
 		if elapsed > _SLOW_THRESHOLD:
@@ -181,6 +144,32 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 	finally:
 		with _lock:
 			_active_count -= 1
+
+FONT_COLOR   = (191, 191, 191, 255)
+SHADOW_COLOR = (0, 0, 0, 255)
+TEXT_MARGIN  = 5
+
+def paste_centered(canvas: Image.Image, img: Image.Image, mask: Image.Image | None = None):
+	x = (canvas.size[0] - img.size[0]) // 2
+	y = (canvas.size[1] - img.size[1]) // 2
+	canvas.paste(img, (x, y), mask)
+
+def draw_label(draw: ImageDraw.ImageDraw, canvasSize: tuple[int, int],
+			   font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
+			   bgColor: tuple[int, int, int], text: str, align: str):
+	w, h = canvasSize
+	bb   = draw.textbbox((0, 0), text, font=font)
+	tw   = bb[2] - bb[0]
+	y    = h - 18
+	box  = bgColor + (90,)
+	if align == 'right':
+		x = w - tw - TEXT_MARGIN
+		draw.rectangle((w - tw - TEXT_MARGIN - 2, y - 1, w, h), fill=box)
+	else:
+		x = TEXT_MARGIN
+		draw.rectangle((0, y - 1, x + tw + 2, h), fill=box)
+	text_outline(draw, x, y, text, font, SHADOW_COLOR)
+	draw.text((x, y), text, font=font, fill=FONT_COLOR)
 
 def text_outline(draw: ImageDraw.ImageDraw, x: int, y: int, text: str,
 				 font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
