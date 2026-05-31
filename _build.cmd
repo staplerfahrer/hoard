@@ -31,8 +31,8 @@ md %dst%
 copy %src%\Enso.png                  %dst%
 copy %src%\Enso.png_LICENSE          %dst%
 copy %src%\favicon.svg               %dst%
+copy %src%\hoard3.png                %dst%
 copy %src%\style.css                 %dst%
-copy %src%\thumbnail-bad-picture.png %dst%
 copy %src%\thumbnail-placeholder.png %dst%
 copy %src%\viewer-mask.png           %dst%
 

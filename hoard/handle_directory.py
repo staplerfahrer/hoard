@@ -37,6 +37,7 @@ def run(server_path: str) -> tuple[bytes, str]:
 	if server_path == fs.VIRTUAL_ROOT:
 		client_children = [fs.to_client_path(p) for _, p in all_roots]
 		img_urls        = []
+		kinds           = ''
 		client_siblings = []
 		tick('virtual root')
 
@@ -63,6 +64,8 @@ def run(server_path: str) -> tuple[bytes, str]:
 		# children always have '..' (parent is real dir or virtual root)
 		client_children = ['..'] + [fs.to_client_path(d) for d in children_list]
 		img_urls        = [fs.to_client_path(f) for f in file_list]
+		# one char per file (same order as img_urls): viewer KIND_* code
+		kinds           = ''.join(str(fs.classify(f)) for f in file_list)
 		tick('client_children/imgUrls')
 
 		# ── Case 2: at a configured root dir — siblings = other roots ────────
@@ -100,6 +103,7 @@ def run(server_path: str) -> tuple[bytes, str]:
 		.replace(b'{autoPlayTimer}', bytes(str(config('autoPlayTimer')), 'utf-8'))
 		.replace(b'{dirUrls}', bytes(json.dumps(client_children), 'utf-8'))
 		.replace(b'{imgUrls}', bytes(json.dumps(img_urls), 'utf-8'))
+		.replace(b'{kinds}', bytes(json.dumps(kinds), 'utf-8'))
 		.replace(b'{scrollRateLimitMs}', bytes(str(config('scrollRateLimitMs')), 'utf-8'))
 		.replace(b'{siblingUrls}', bytes(json.dumps(client_siblings), 'utf-8'))
 		.replace(b'{zoomSpeed}', bytes(config('zoomSpeed'), 'utf-8'))

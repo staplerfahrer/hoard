@@ -23,4 +23,4 @@ To start the server:
 
     python main.py
 
-* Optionally, for Canon Raw file support, download *dcraw.exe* (https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/)
+* Optionally, for camera RAW file support, download *dcraw.exe* (https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/). All RAW formats dcraw can decode are supported (Canon, Nikon, Sony, Fujifilm, Olympus, Panasonic, Pentax, Adobe DNG, and more).

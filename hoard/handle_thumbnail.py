@@ -103,6 +103,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			if img.mode != 'RGB':
 				img = img.convert('RGB')
 
+			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
+
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
 			img.thumbnail(size=tnWidthHeight, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
@@ -111,7 +113,6 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			canvas = Image.new('RGB', tnWidthHeight, tnColor)
 			paste_centered(canvas, img)
 
-			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
 			draw       = ImageDraw.Draw(canvas, 'RGBA')
 			draw_label(draw, tnWidthHeight, font, tnColor, file_name,  'left')
 			draw_label(draw, tnWidthHeight, font, tnColor, text_right, 'right')

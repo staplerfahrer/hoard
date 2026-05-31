@@ -1,7 +1,10 @@
+import io
 import os
 import subprocess
 import traceback
 import urllib.parse as urlparse
+
+from PIL import Image
 
 from config import config, WINDOWS
 from log import log
@@ -14,8 +17,6 @@ MIME: dict[str, str] = {
 	'.webp': 'image/webp',
 	'.bmp' : 'image/bmp',
 	'.svg' : 'image/svg+xml',
-	'.crw' : 'image/jpeg',
-	'.cr2' : 'image/jpeg',
 	'.mp4' : 'video/mp4',
 	'.m4v' : 'video/mp4',
 	'.mov' : 'video/mp4',
@@ -30,14 +31,96 @@ MIME: dict[str, str] = {
 	'.heif': 'image/heif',
 }
 
-RAW_EXTS = frozenset({'.crw', '.cr2'})
+# Camera RAW formats decodable by dcraw (Dave Coffin's dcraw.c, as built by
+# ncruces/dcraw). Grouped by manufacturer. dcraw handles all of these; we route
+# any of these extensions through dcraw_extract().
+RAW_EXTS = frozenset({
+	'.3fr',                          # Hasselblad
+	'.arw', '.srf', '.sr2',          # Sony
+	'.bay',                          # Casio
+	'.cap', '.iiq', '.eip',          # Phase One
+	'.crw', '.cr2',                  # Canon
+	'.dcs', '.dcr', '.drf', '.k25', '.kdc',  # Kodak
+	'.dng',                          # Adobe / generic
+	'.erf',                          # Epson
+	'.fff',                          # Imacon / Hasselblad
+	'.mef',                          # Mamiya
+	'.mdc',                          # Minolta / Agfa
+	'.mos',                          # Leaf
+	'.mrw',                          # Minolta
+	'.nef', '.nrw',                  # Nikon
+	'.orf',                          # Olympus
+	'.pef', '.ptx',                  # Pentax
+	'.pxn',                          # Logitech
+	'.raf',                          # Fujifilm
+	'.raw', '.rw2', '.rwl', '.rwz',  # Panasonic / Leica
+	'.srw',                          # Samsung
+	'.x3f',                          # Sigma / Foveon
+})
+
+# RAW files are always delivered as JPEG (embedded preview or re-encoded decode).
+MIME.update({ext: 'image/jpeg' for ext in RAW_EXTS})
 
 NON_IMAGE_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm', '.mp3', '.m4a', '.ogg', '.wav', '.pdf'})
 
+
+# How the gallery viewer can present a file. These codes are mirrored in
+# gallery.html (KIND_* constants) and packed one-char-per-file into {kinds}
+# so the viewer can skip files it can't display during next/prev navigation.
+KIND_UNVIEWABLE = 0  # txt, zip, audio, … — viewer skips these
+KIND_IMAGE      = 1  # shown in <img> (native, RAW→JPEG, HEIC, PIL-convertible)
+KIND_VIDEO      = 2  # shown in <video>
+KIND_PDF        = 3  # shown in an <iframe>
+
+# Still-image extensions the <img> endpoint (handle_file) can produce: browser-
+# native, RAW (dcraw→JPEG), HEIC/HEIF (pillow-heif), and other formats re-encoded
+# via PIL. Kept as an explicit allowlist so classification never opens the file.
+IMAGE_EXTS = frozenset({
+	'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
+	'.heic', '.heif', '.tif', '.tiff', '.ico', '.jp2', '.tga',
+}) | RAW_EXTS
+
+VIDEO_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm'})
+
+
+def classify(path: str) -> int:
+	"""Return the viewer KIND_* code for a file, by extension only."""
+	ext = os.path.splitext(path)[1].lower()
+	if ext == '.pdf':
+		return KIND_PDF
+	if ext in IMAGE_EXTS:
+		return KIND_IMAGE
+	if ext in VIDEO_EXTS:
+		return KIND_VIDEO
+	return KIND_UNVIEWABLE
+
+
 def dcraw_extract(server_path: str) -> bytes | None:
+	"""Return displayable JPEG bytes for a RAW file via dcraw.
+
+	Tries the embedded preview first (-e: fast, no demosaicing, returned
+	unchanged). RAW files without an embedded preview fall back to a full
+	decode (-c -w) whose PPM output is re-encoded to JPEG.
+	"""
 	exe = os.path.join('resources', 'dcraw.exe') if WINDOWS else 'dcraw'
+
+	# fast path: extract the embedded JPEG preview, passed through unchanged
 	result = subprocess.run([exe, '-e', '-c', server_path], capture_output=True)
-	return result.stdout if result.returncode == 0 and result.stdout else None
+	if result.returncode == 0 and result.stdout:
+		return result.stdout
+
+	# fallback: full RAW decode (camera white balance) to PPM, re-encoded to JPEG
+	result = subprocess.run([exe, '-c', '-w', server_path], capture_output=True)
+	if result.returncode != 0 or not result.stdout:
+		return None
+	try:
+		with Image.open(io.BytesIO(result.stdout)) as img:
+			buf = io.BytesIO()
+			img.convert('RGB').save(buf, format='JPEG', quality=95)
+			return buf.getvalue()
+	except Exception:
+		log(f'dcraw_extract full-decode convert failed: {traceback.format_exc()}')
+		return None
 
 
 VIRTUAL_ROOT = '\x00'  # sentinel for the synthetic "/" directory (no real fs path)

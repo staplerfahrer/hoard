@@ -30,6 +30,8 @@ import stats
 # TODO: allow setting a password on specific directories; prompt for it on first access and store auth in a session cookie.
 # TODO: create a set of mask images for common aspect ratios (1:1, 4:3, 16:9, 3:2, etc.) and apply them as CSS mask-image on thumbnails to soften edges.
 # TODO: fix pixel dimensions reported for RAW files (currently reads dcraw output dimensions, which may reflect the thumbnail rather than the full sensor resolution).
+# TODO: add a "show all subfolders" feature that recursively gathers files from the current directory and all descendants into one flat gallery view.
+# TODO: virtualize the thumbnail grid for large galleries (e.g. 50k files) — only keep DOM <img> nodes for the visible window plus a buffer, recycling nodes on scroll, so memory stays bounded regardless of directory size.
 # TODO: MRU in cookie
 # TODO: fix video player full-screen
 # TODO: fix video player keyboard seek

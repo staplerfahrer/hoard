@@ -50,6 +50,7 @@
 			viewing              : false,
 			viewedIndex          : 0,
 			imgUrls              : {imgUrls},
+			kinds                : {kinds}, // one char per imgUrl: KIND_* code
 			dirUrls              : {dirUrls},
 			imgElms              : [],
 			dirElms              : {},
@@ -65,6 +66,12 @@
 		let cache          = {}
 		let siblingUrls    = {siblingUrls}
 		let allowDelete    = {allowDelete}
+
+		// viewer file kinds — mirror filesystem.py classify() codes (packed in viewerState.kinds)
+		const KIND_UNVIEWABLE = '0'
+		const KIND_IMAGE      = '1'
+		const KIND_VIDEO      = '2'
+		const KIND_PDF        = '3'
 
 		vb = document.getElementById('viewBox')
 		vi = document.getElementById('viewImg')
@@ -313,32 +320,49 @@
 			return count || 1
 		}
 
-		function updateViewed() {
-			if (viewerState.viewedIndex < 0) {
-				viewerState.viewedIndex = viewerState.imgUrls.length - 1
-			} else if (viewerState.viewedIndex >= viewerState.imgUrls.length) {
-				viewerState.viewedIndex = 0
+		// nearest index (from start, inclusive) the viewer can display, scanning
+		// by dir (+1/-1) with wrap-around; -1 if nothing is viewable.
+		function nextViewableIndex(start, dir) {
+			const n = viewerState.imgUrls.length
+			let i = start
+			for (let count = 0; count < n; count++) {
+				if (i < 0) i = n - 1
+				else if (i >= n) i = 0
+				if (viewerState.kinds[i] !== KIND_UNVIEWABLE) return i
+				i += dir
 			}
+			return -1
+		}
+
+		function updateViewed(dir = 1) {
+			const n = viewerState.imgUrls.length
+			if (n === 0) return
+			// wrap
+			if (viewerState.viewedIndex < 0) viewerState.viewedIndex = n - 1
+			else if (viewerState.viewedIndex >= n) viewerState.viewedIndex = 0
+			// skip files the viewer can't display, continuing in the travel direction
+			const landed = nextViewableIndex(viewerState.viewedIndex, dir >= 0 ? 1 : -1)
+			if (landed === -1) return // nothing displayable
+			viewerState.viewedIndex = landed
+
 			updateCookie(window.location.href, viewerState.viewedIndex)
 			borderViewed()
 			if (!window.zoomed) return
 
 			// update & display
 			let url = viewerState.imgUrls[viewerState.viewedIndex]
-			if (url.toLowerCase().endsWith('.pdf')) {
+			const kind = viewerState.kinds[viewerState.viewedIndex]
+			if (kind === KIND_PDF) {
 				// pdf
 				vv.style.display = 'none'
 				vi.style.display = 'none'
 				vpdf.src = url
 				vpdf.style.display = ''
 				vclose.style.display = ''
-			} else if (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.ts')) {
+			} else if (kind === KIND_VIDEO) {
 				// video
 				vpdf.style.display = 'none'
 				vclose.style.display = 'none'
-				// hide the image buffer so it doesn't show beside the video
-				vi.style.display = 'none'
-				vi.classList.remove('slowZoom')
 				// https://stackoverflow.com/questions/5235145/changing-source-on-html5-video-tag
 				vv.style.display = 'inline-block'
 				let vvSources = vv.getElementsByTagName('source')
@@ -358,9 +382,6 @@
 			} else {
 				vpdf.style.display = 'none'
 				vclose.style.display = 'none'
-				// hide the video so it doesn't show beside the image
-				vv.pause()
-				vv.style.display = 'none'
 				// picture — triple-buffered to avoid flicker in both directions
 				const absUrl = new URL(url, location.href).href
 				const vi2Hit = vi2.complete && vi2.naturalWidth > 0 && vi2.src === absUrl
@@ -386,7 +407,7 @@
 				}
 				// preload next into vi2, prev into vi3
 				const nextIdx = viewerState.viewedIndex + 1
-				if (nextIdx < viewerState.imgUrls.length) {
+				if (nextIdx < viewerState.imgUrls.length && viewerState.kinds[nextIdx] === KIND_IMAGE) {
 					const nextUrl = viewerState.imgUrls[nextIdx]
 					if (vi2.src !== new URL(nextUrl, location.href).href) {
 						vi2.onload = null
@@ -394,7 +415,7 @@
 					}
 				}
 				const prevIdx = viewerState.viewedIndex - 1
-				if (prevIdx >= 0) {
+				if (prevIdx >= 0 && viewerState.kinds[prevIdx] === KIND_IMAGE) {
 					const prevUrl = viewerState.imgUrls[prevIdx]
 					if (vi3.src !== new URL(prevUrl, location.href).href) {
 						vi3.onload = null
@@ -596,24 +617,24 @@
 				else if (e.key == 'ArrowLeft' ) {
 					viewerState.viewedIndex--
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(-1)
 				}
 				else if (e.key == 'ArrowRight') {
 					viewerState.viewedIndex++
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(1)
 				}
 				else if (e.key == 'ArrowUp'   ) {
 					e.preventDefault()
 					viewerState.viewedIndex -= imagesPerRow()
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(-1)
 				}
 				else if (e.key == 'ArrowDown' ) {
 					e.preventDefault()
 					viewerState.viewedIndex += imagesPerRow()
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(1)
 				}
 				// toggle viewing
 				else if (e.key == 'Escape' || e.key == 'Enter') {
@@ -648,6 +669,7 @@
 							viewerState.imgElms[idx].remove()
 							viewerState.imgElms.splice(idx, 1)
 							viewerState.imgUrls.splice(idx, 1)
+							viewerState.kinds = viewerState.kinds.slice(0, idx) + viewerState.kinds.slice(idx + 1)
 							if (idx < viewerState.lowestPending) viewerState.lowestPending--
 							for (let i = idx; i < viewerState.imgElms.length; i++)
 								viewerState.imgElms[i].setAttribute('data-index', i)
@@ -679,12 +701,12 @@
 					window.busyScrolling = true
 					viewerState.viewedIndex++
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(1)
 				} else if (viewerState.scrolledPixelsWhileBusy <= -100) {
 					window.busyScrolling = true
 					viewerState.viewedIndex--
 					changeAutoPlay('reset')
-					updateViewed()
+					updateViewed(-1)
 				}
 
 				if (window.busyScrolling) {
@@ -743,11 +765,11 @@
 					if (xDiff > 0) {
 						// swiping right
 						viewerState.viewedIndex++
-						updateViewed()
+						updateViewed(1)
 					} else {
 						// swiping left
 						viewerState.viewedIndex--
-						updateViewed()
+						updateViewed(-1)
 					}
 				} else {
 					// vertical distance greater
