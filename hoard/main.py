@@ -1,6 +1,6 @@
 from collections import deque
 from shutil import get_terminal_size
-from socket import create_server, socket
+from socket import create_server, socket, getaddrinfo, gethostname, AF_INET, SOCK_DGRAM
 from time import sleep, perf_counter
 import os
 import sys
@@ -9,7 +9,7 @@ import time
 import traceback
 import webbrowser
 
-from pillow_heif import register_heif_opener
+from pillow_heif import register_heif_opener # type: ignore
 register_heif_opener()
 
 from config import config, WINDOWS
@@ -35,17 +35,10 @@ import stats
 # TODO: MRU in cookie
 # TODO: fix video player full-screen
 # TODO: fix video player keyboard seek
+# TODO: fix video hotkeys (keyboard controls are wildly inconsistent)
+# TODO: when switching to full screen, maybe show thumbnail until the large image has loaded, or some busy indicator
 
 THREAD_COUNT = 30
-
-# The thumbnails for every image are already loaded in the browser cache — addImg loaded them to build the gallery. In
-#   updateViewed, instead of immediately hiding vi while the full-res fetches, we could set vi.src to the thumbnail URL
-#   first (instant, from cache), then load the full-res in a background Image object and swap it in when ready.
-
-#   The one complication: vi.onload = zoomStyle uses vi.naturalWidth/Height for the zoom animation, so we'd need to
-#   suppress it for the thumbnail swap and only let it fire for the full-res. A simple boolean flag handles that.
-
-
 
 queue            : deque[tuple[socket, str]] = deque()
 thumbnail_queue  : deque[tuple[socket, str]] = deque()
@@ -53,29 +46,12 @@ busy_thread_count: int                       = 0
 busy_thread_lock : threading.Lock            = threading.Lock()
 
 
-def check_dependencies():
-	deps = {
-		'dcraw.exe': 'https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/',
-	}
-	show_message = False
-	for exe, url in deps.items():
-		if not os.path.isfile(os.path.join('resources', exe)):
-			print(f'Missing optional program {exe}\n'
-				f'Download it from {url} and place it in the resources folder.\n'
-				'Waiting 10 seconds...')
-			show_message = True
-
-	if show_message:
-		time.sleep(10)
-		os.system('cls' if WINDOWS else 'clear')
-
-
 def main():
 	try:
 		os.system('cls' if WINDOWS else 'clear')
 		check_dependencies()
 		if config('autoStart'):
-			webbrowser.open(f'http://{config("address")}:{config("port")}')
+			webbrowser.open(server_urls()[0])
 
 		# UI thread
 		threading.Thread(
@@ -109,7 +85,7 @@ def listen(address: str, port: int):
 	# https://docs.python.org/3/library/socket.html
 	with create_server((address, port)) as serv:
 		# timeout because browsers may start blocking, empty request connections
-		serv.settimeout(1)
+		serv.settimeout(10)
 		log(f'Listen...{serv} timeout {serv.timeout}')
 		while True:
 			try:
@@ -158,6 +134,7 @@ def thread_worker():
 				log('Popping job ' + req.replace('\r\n', '\\n'))
 
 			bytes_ = handle_request.build_response_bytes(req)
+			log(f'{len(bytes_)} bytes')
 			conn.sendall(bytes_)
 			conn.close()
 
@@ -188,10 +165,13 @@ def ui():
 	sec_per_frame = 1 / 60
 	last_rq = 0
 	req_sec_avg = 0
+	urls = server_urls()
+	# when bound to all interfaces, list every reachable URL; the title shows the primary one
+	addresses_line = '' if len(urls) <= 1 else 'Reachable at  ' + '   '.join(urls) + '\n'
 	while True:
 		sleep(sec_per_frame)
 		cols  = get_terminal_size().columns - 1
-		title = f' hoard Media Gallery serving at http://{config("address")}:{config("port")} '
+		title = f' hoard Media Gallery serving at {urls[0]} '
 		pad   = (cols - len(title)) // 2
 		title = f'{"=" * pad}{title}{"=" * pad}'
 		request_queue = len(queue) + len(thumbnail_queue)
@@ -209,6 +189,7 @@ def ui():
 		content = (
 			f'{title}\n'
 			f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
+			f'{addresses_line}'
 			f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
 			f'\r\033[K{busy_workers :>4} workers {"W" * min(busy_workers, cols - 20)}\n'
 			f'\r\033[K{stats_line}\n'
@@ -248,6 +229,56 @@ def hotkey_listener():
 			pass
 		finally:
 			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)              # type: ignore
+
+
+def server_urls() -> list[str]:
+	"""Client-reachable http URLs for the configured bind address."""
+	address = config('address')
+	port    = config('port')
+	if address in ('0.0.0.0', '::', ''):
+		hosts = local_ip_addresses() or ['127.0.0.1']
+	else:
+		hosts = [address]
+	return [f'http://{h}:{port}' for h in hosts]
+
+
+def local_ip_addresses() -> list[str]:
+	"""Best-effort list of this machine's LAN IPv4 addresses (for 0.0.0.0 binds)."""
+	ips: list[str] = []
+	# primary outbound IP — the one LAN clients are most likely to reach us on.
+	# Connecting a UDP socket sends no packets; it just selects the default route.
+	try:
+		with socket(AF_INET, SOCK_DGRAM) as s:
+			s.connect(('8.8.8.8', 80))
+			ips.append(s.getsockname()[0])
+	except Exception:
+		pass
+	# any other IPv4 addresses bound to this host
+	try:
+		for info in getaddrinfo(gethostname(), None, AF_INET):
+			ip = info[4][0]
+			if ip not in ips:
+				ips.append(ip) # type: ignore
+	except Exception:
+		pass
+	return ips
+
+
+def check_dependencies():
+	deps = {
+		'dcraw.exe': 'https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/',
+	}
+	show_message = False
+	for exe, url in deps.items():
+		if not os.path.isfile(os.path.join('resources', exe)):
+			print(f'Missing optional program {exe}\n'
+				f'Download it from {url} and place it in the resources folder.\n'
+				'Waiting 10 seconds...')
+			show_message = True
+
+	if show_message:
+		time.sleep(10)
+		os.system('cls' if WINDOWS else 'clear')
 
 
 if __name__ == '__main__':

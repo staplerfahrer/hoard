@@ -1,7 +1,7 @@
 import io
 import os
 # pip install types-Pillow to fix Pylance
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter, ImageColor
+from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter, ImageColor, UnidentifiedImageError
 import av
 import threading
 import time
@@ -114,13 +114,20 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			paste_centered(canvas, img)
 
 			draw       = ImageDraw.Draw(canvas, 'RGBA')
-			draw_label(draw, tnWidthHeight, font, tnColor, file_name,  'left')
-			draw_label(draw, tnWidthHeight, font, tnColor, text_right, 'right')
+			# truncate the filename so its label can't run into the right-hand label
+			right_w    = draw.textlength(text_right, font=font)
+			max_left   = tnWidthHeight[0] - right_w - 2 * TEXT_MARGIN - LABEL_GAP
+			file_label = ellipsize(draw, file_name, font, max_left)
+			draw_label(draw, tnWidthHeight, font, tnColor, file_label, 'left') # type: ignore
+			draw_label(draw, tnWidthHeight, font, tnColor, text_right, 'right') # type: ignore
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
-		except Exception:
-			log(f'Exception at "make a thumbnail": {traceback.format_exc()}')
+		except Exception as e:
+			if isinstance(e, UnidentifiedImageError):
+				log(f'Couldn\'t render thumbnail for {serverPath}')
+			else:
+				log(f'Exception at "make a thumbnail": {traceback.format_exc()}')
 			icon = Image.open(os.path.join('resources', 'Enso.png'))
 			icon.thumbnail(size=tnWidthHeight)
 
@@ -128,7 +135,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			paste_centered(canvas, icon, icon if icon.mode == 'RGBA' else None)
 
 			draw = ImageDraw.Draw(canvas, 'RGBA')
-			draw_label(draw, tnWidthHeight, font, tnColor, f'Can\'t render {file_name}', 'left')
+			err_label = ellipsize(draw, f'{file_name} cannot be rendered.', font, tnWidthHeight[0] - 2 * TEXT_MARGIN - LABEL_GAP)
+			draw_label(draw, tnWidthHeight, font, tnColor, err_label, 'left') # type: ignore
 
 		buf = io.BytesIO()
 		canvas.save(buf, format='jpeg', quality=95, optimize=False, progressive=True, subsampling=1)
@@ -149,6 +157,18 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 FONT_COLOR   = (191, 191, 191, 255)
 SHADOW_COLOR = (0, 0, 0, 255)
 TEXT_MARGIN  = 5
+LABEL_GAP    = 10  # min px between the left and right labels (and from the edge)
+
+def ellipsize(draw: ImageDraw.ImageDraw, text: str,
+			  font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: float) -> str:
+	"""Trim text from the end and append '…' until it fits within max_width px."""
+	if max_width <= 0:
+		return ''
+	if draw.textlength(text, font=font) <= max_width:
+		return text
+	while text and draw.textlength(text + '…', font=font) > max_width:
+		text = text[:-1]
+	return text + '…' if text else '…'
 
 def paste_centered(canvas: Image.Image, img: Image.Image, mask: Image.Image | None = None):
 	x = (canvas.size[0] - img.size[0]) // 2
@@ -170,11 +190,11 @@ def draw_label(draw: ImageDraw.ImageDraw, canvasSize: tuple[int, int],
 		x = TEXT_MARGIN
 		draw.rectangle((0, y - 1, x + tw + 2, h), fill=box)
 	text_outline(draw, x, y, text, font, SHADOW_COLOR)
-	draw.text((x, y), text, font=font, fill=FONT_COLOR)
+	draw.text((x, y), text, font=font, fill=FONT_COLOR) # type: ignore
 
 def text_outline(draw: ImageDraw.ImageDraw, x: int, y: int, text: str,
 				 font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
 				 color: tuple[int, int, int, int]):
 	for y1 in range(-1, 2):
 		for x1 in range(-1, 2):
-			draw.text((x+x1, y+y1), text,  font=font, fill=color)
+			draw.text((x+x1, y+y1), text,  font=font, fill=color) # type: ignore

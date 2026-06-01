@@ -167,14 +167,15 @@ def read_file_bytes(file_name: str, range_l: int | None = None, range_u: int | N
 		f.seek(0, os.SEEK_END)
 		file_end = f.tell()
 
-		if range_u is None:
-			range_u = range_l + config('streamingChunkBytes') - 1
+		range_u_value = range_u or range_l + config('streamingChunkBytes') - 1
 
-		if range_u >= file_end: # type: ignore
-			range_u = file_end - 1
+		if range_u_value >= file_end:
+			range_u_value = file_end - 1
 
 		f.seek(range_l)
-		return f.read(range_u - range_l + 1), range_l, range_u, file_end # type: ignore
+		count = range_u_value - range_l + 1
+		serve = f.read(count), range_l, range_u_value, file_end
+		return serve
 
 
 def delete_file(server_path: str) -> tuple[bytes, str]:
