@@ -9,6 +9,7 @@ import traceback
 
 from config import config
 import filesystem as fs
+import plugins
 from log import log
 
 
@@ -45,9 +46,17 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 		reqObjBytes: io.BytesIO | None  = None
 		reqObjImage: Image.Image | None = None
 
+		# render plugins take precedence; their preview rides the pipeline below
+		plugin = plugins.plugin_for(reqObj)
+		if plugin is not None:
+			try:
+				reqObjBytes = io.BytesIO(plugin.render_thumbnail(reqObj, tnWidthHeight))
+			except Exception:
+				log(f'plugin thumbnail failed for {reqObj}: {traceback.format_exc()}')
+
 		# if video, extract a frame via PyAV (in-process, no subprocess)
 		try:
-			if not (reqObj.endswith('.mp4') or reqObj.endswith('.m4v') or reqObj.endswith('.mov') or reqObj.endswith('.ts')):
+			if reqObjBytes is not None or not (reqObj.endswith('.mp4') or reqObj.endswith('.m4v') or reqObj.endswith('.mov') or reqObj.endswith('.ts')):
 				raise Exception('not a video')
 			timeStamps = config('videoThumbnailTimeStamps')
 			with av.open(reqObj) as container:
@@ -70,7 +79,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 				log(f'Exception at "video thumbnail": {traceback.format_exc()}')
 
 		# for RAW files, extract the embedded JPEG via dcraw before PIL opens it
-		if not reqObjImage:
+		if not reqObjImage and reqObjBytes is None:
 			raw_ext = os.path.splitext(reqObj)[1].lower()
 			if raw_ext in fs.RAW_EXTS:
 				raw_bytes = fs.dcraw_extract(reqObj)
@@ -79,7 +88,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 
 		# for PDF files, render page 0 via PyMuPDF
 		pdf_page_count: int | None = None
-		if not reqObjImage and reqObj.lower().endswith('.pdf'):
+		if not reqObjImage and reqObjBytes is None and reqObj.lower().endswith('.pdf'):
 			try:
 				import fitz  # PyMuPDF
 				doc = fitz.open(reqObj)

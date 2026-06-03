@@ -8,6 +8,7 @@ from PIL import Image
 
 from config import config, WINDOWS
 from log import log
+import plugins
 
 MIME: dict[str, str] = {
 	'.jpg' : 'image/jpeg',
@@ -86,6 +87,8 @@ VIDEO_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm'})
 def classify(path: str) -> int:
 	"""Return the viewer KIND_* code for a file, by extension only."""
 	ext = os.path.splitext(path)[1].lower()
+	if plugins.handles(ext):  # plugin-rendered files are shown as images
+		return KIND_IMAGE
 	if ext == '.pdf':
 		return KIND_PDF
 	if ext in IMAGE_EXTS:

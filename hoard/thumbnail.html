@@ -24,6 +24,11 @@
 				#thumbnailContainer {
 					grid-template-columns: repeat(auto-fill, ${thumbnailWidthHeight[0]}px);
 				}
+
+				.tn-wrap {
+					width  : ${thumbnailWidthHeight[0]}px;
+					height : ${thumbnailWidthHeight[1]}px;
+				}
 			`)
 			const sheet = document.createElement('style')
 			sheet.appendChild(sheetContents)
@@ -45,8 +50,34 @@
 			img.setAttribute('src', '/thumbnail-placeholder.png')
 			img.onclick = toggleZoom
 			const par = document.getElementById('thumbnailContainer')
-			par.appendChild(img)
+			if (viewerState.recursive) {
+				// wrap so we can caption the file's subfolder (relative to the current dir)
+				const wrap = document.createElement('div')
+				wrap.classList.add('tn-wrap')
+				wrap.appendChild(img)
+				const rel = relativeFolder(url)
+				if (rel) {
+					const caption = document.createElement('div')
+					caption.classList.add('tn-caption')
+					caption.innerText = rel
+					caption.title = rel
+					wrap.appendChild(caption)
+				}
+				par.appendChild(wrap)
+			} else {
+				par.appendChild(img)
+			}
 			viewerState.imgElms.push(img)
+		}
+
+		function relativeFolder(url) {
+			// subfolder of url relative to the current directory, sans filename ('' if directly inside)
+			const base = decodeURIComponent(window.location.pathname).replace(/\/+$/, '')
+			const p = decodeURIComponent(url)
+			const slash = p.lastIndexOf('/')
+			let dir = slash >= 0 ? p.slice(0, slash) : ''
+			if (dir.startsWith(base)) dir = dir.slice(base.length)
+			return dir.replace(/^\/+/, '')
 		}
 
 		function load(i) {

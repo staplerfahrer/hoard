@@ -22,7 +22,7 @@ else:
 
 BLOCK_LIST = [r'thumbs.db$', r'.deleted$', r'\.xmp$', r'desktop\.ini$', r'\.mylock_', r'\.lnk$']
 
-def run(server_path: str) -> tuple[bytes, str]:
+def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 	t = perf_counter()
 	def tick(label: str):
 		nonlocal t
@@ -58,7 +58,11 @@ def run(server_path: str) -> tuple[bytes, str]:
 		tick('scandir')
 
 		children_list   = sorted([o.path for o in objs if o.is_dir()], key=_sort_key)
-		file_list       = sorted([o.path for o in objs if o.is_file()], key=_sort_key)
+		if recursive:
+			# all files under req_obj, grouped by folder, naturally sorted within each
+			file_list   = _walk_files(req_obj)
+		else:
+			file_list   = sorted([o.path for o in objs if o.is_file()], key=_sort_key)
 		tick('children/files')
 
 		# children always have '..' (parent is real dir or virtual root)
@@ -100,6 +104,9 @@ def run(server_path: str) -> tuple[bytes, str]:
 
 	data = (data
 		.replace(b'{allowDelete}', b'true' if config('allowDelete') else b'false')
+		.replace(b'{displayUnrenderables}', b'true' if config('displayUnrenderables') else b'false')
+		.replace(b'{preferAltNavigation}', b'true' if config('preferAltNavigation') else b'false')
+		.replace(b'{recursive}', b'true' if recursive else b'false')
 		.replace(b'{autoPlayTimer}', bytes(str(config('autoPlayTimer')), 'utf-8'))
 		.replace(b'{dirUrls}', bytes(json.dumps(client_children), 'utf-8'))
 		.replace(b'{imgUrls}', bytes(json.dumps(img_urls), 'utf-8'))
@@ -115,6 +122,24 @@ def run(server_path: str) -> tuple[bytes, str]:
 # def _natural_key(path: str):
 # 	parts = re.split(r'(\d+)', os.path.basename(path).lower())
 # 	return [int(p) if p.isdigit() else p for p in parts]
+
+
+def _walk_files(root: str) -> list[str]:
+	"""All non-blocked files under root, grouped by folder, naturally sorted.
+
+	Subdirectories are pruned in place so blocked subtrees (.deleted, etc.) are
+	not descended; symlinks are not followed (os.walk default), so no loops.
+	"""
+	files: list[str] = []
+	for dirpath, dirnames, filenames in os.walk(root):
+		dirnames[:] = sorted(
+			(d for d in dirnames if not _is_blocked(os.path.join(dirpath, d))),
+			key=_sort_key)
+		for name in sorted(filenames, key=_sort_key):
+			full = os.path.join(dirpath, name)
+			if not _is_blocked(full):
+				files.append(full)
+	return files
 
 
 def _is_blocked(path: str):

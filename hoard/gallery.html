@@ -22,6 +22,7 @@
 		<a id="navPrevious">&larr;</a>
 		<a id="navUp">&uarr;</a>
 		<a id="navNext">&rarr;</a>
+		<a id="navAll" title="Show all files in this folder and every subfolder">&#x29C9; all</a>
 		<div id="titleContainer"></div>
 	</div>
 	<div id="thumbnailContainer">
@@ -51,6 +52,7 @@
 			viewedIndex          : 0,
 			imgUrls              : {imgUrls},
 			kinds                : {kinds}, // one char per imgUrl: KIND_* code
+			recursive            : {recursive}, // show-all-subfolders view
 			dirUrls              : {dirUrls},
 			imgElms              : [],
 			dirElms              : {},
@@ -66,6 +68,10 @@
 		let cache          = {}
 		let siblingUrls    = {siblingUrls}
 		let allowDelete    = {allowDelete}
+		let displayUnrenderables = {displayUnrenderables}
+		let preferAltNavigation = {preferAltNavigation}
+		// modifier for directory navigation (Ctrl by default, Alt if preferred)
+		const navMod = preferAltNavigation ? 'altKey' : 'ctrlKey'
 
 		// viewer file kinds — mirror filesystem.py classify() codes (packed in viewerState.kinds)
 		const KIND_UNVIEWABLE = '0'
@@ -86,6 +92,19 @@
 		autoPlayButton = document.getElementById('autoPlayButton')
 
 		function buildDom() {
+			// optionally drop files the viewer can't render (keeps imgUrls/kinds aligned)
+			if (!displayUnrenderables) {
+				const keptUrls = []
+				let keptKinds = ''
+				for (let i = 0; i < viewerState.imgUrls.length; i++) {
+					if (viewerState.kinds[i] === KIND_UNVIEWABLE) continue
+					keptUrls.push(viewerState.imgUrls[i])
+					keptKinds += viewerState.kinds[i]
+				}
+				viewerState.imgUrls = keptUrls
+				viewerState.kinds = keptKinds
+			}
+
 			const beautifyLabel = (l) => l.replace(/^\//, '').replaceAll('/', '▹')
 			const currentPathLabel = beautifyLabel(decodeURIComponent(window.location.pathname))
 			const title1 = `hoard ${viewerState.imgUrls.length} ${currentPathLabel}`
@@ -127,6 +146,21 @@
 				nn.innerText = beautifyLabel(decodeURI(siblingUrls[idx + 1])) + ' ' + nn.innerText
 			} else {
 				nn.classList.add('nav-hidden')
+			}
+
+			// "all" toggle: switch between this folder and the recursive (?all) view
+			const na = document.getElementById('navAll')
+			if (cur === '/') {
+				na.classList.add('nav-hidden') // recursive is meaningless at the virtual root
+			} else {
+				const allTarget = window.location.origin + cur + (viewerState.recursive ? '' : '?all')
+				na.href = allTarget
+				na.onclick = () => {
+					updateCookie(allTarget, 0) // keep resume cookie in sync so it doesn't bounce back
+					window.location.href = allTarget
+					return false
+				}
+				if (viewerState.recursive) na.classList.add('active')
 			}
 
 			vv.onplay    = e => {viewerState.videoState = 'playing'}
@@ -602,18 +636,22 @@
 			document.onkeydown = (e) => {
 				console.log(e)
 				// directory navigation
-				if      (e.ctrlKey && e.key == 'ArrowUp'   ) {
+				if      (e[navMod] && e.key == 'ArrowUp'   ) {
+					e.preventDefault()
 					const cur = window.location.pathname;
 					const idx = siblingUrls.indexOf(cur)
 					if (idx > 0) navigateTo(siblingUrls[idx - 1])
 				}
-				else if (e.ctrlKey && e.key == 'ArrowLeft' ) {
+				else if (e[navMod] && e.key == 'ArrowLeft' ) {
+					e.preventDefault()
 					navigateTo(viewerState.dirUrls[0])
 				}
-				else if (e.ctrlKey && e.key == 'ArrowRight') {
+				else if (e[navMod] && e.key == 'ArrowRight') {
+					e.preventDefault()
 					if (viewerState.dirUrls.length > 1) navigateTo(viewerState.dirUrls[1])
 				}
-				else if (e.ctrlKey && e.key == 'ArrowDown' ) {
+				else if (e[navMod] && e.key == 'ArrowDown' ) {
+					e.preventDefault()
 					const cur = window.location.pathname;
 					const idx = siblingUrls.indexOf(cur)
 					if (idx !== -1 && idx < siblingUrls.length - 1) navigateTo(siblingUrls[idx + 1])

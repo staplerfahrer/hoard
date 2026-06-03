@@ -13,7 +13,11 @@ from resources import resource
 
 def build_response_bytes(req: str) -> bytes:
 	req, range_l, range_u = _decode_request(req)
-	req_server_path       = fs.to_server_path(req)
+	# directory-level '?all' = recursive listing; strip it before path translation
+	# (unlike file suffixes ?tn/?del, it must not ride through to_server_path or a
+	# top-level root name like '/C Pictures?all' would fail to resolve)
+	recursive             = req.endswith('?all')
+	req_server_path       = fs.to_server_path(req[:-4] if recursive else req)
 	end                   = None
 
 	if resource(req):
@@ -21,6 +25,9 @@ def build_response_bytes(req: str) -> bytes:
 
 	elif req.startswith('/.well-known'):
 		data, mime = b'', 'text/plain'
+
+	elif recursive and os.path.isdir(req_server_path):
+		data, mime = handle_directory.run(req_server_path, recursive=True)
 
 	elif req_server_path == fs.VIRTUAL_ROOT or os.path.isdir(req_server_path):
 		data, mime = handle_directory.run(req_server_path)

@@ -4,7 +4,9 @@
 	"autoPlayTimer"           : 9000,
 	"autoStart"               : false,
 	"cacheSeconds"            : 2678400,
+	"displayUnrenderables"    : true,
 	"port"                    : 8000,
+	"preferAltNavigation"     : false,
 	"roots"                   : [
 		{"name": "Photos", "path": "N:\\Pictures"}
 	],

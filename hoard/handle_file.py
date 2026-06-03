@@ -3,6 +3,7 @@ import os
 import traceback
 from PIL import Image
 import filesystem as fs
+import plugins
 from log import log
 
 
@@ -21,6 +22,16 @@ def run(server_path: str, range_l: int | None, range_u: int | None) \
 		-> tuple[bytes, str, int | None, int | None, int | None] | None:
 	if not os.path.isfile(server_path):
 		return None
+
+	# render plugins take precedence over the built-in handlers
+	plugin = plugins.plugin_for(server_path)
+	if plugin is not None:
+		try:
+			data, mime = plugin.render(server_path)
+			return data, mime, None, None, None
+		except Exception:
+			log(f'plugin render failed for {server_path}: {traceback.format_exc()}')
+			return None
 
 	# convert raw files
 	ext = os.path.splitext(server_path)[1].lower()

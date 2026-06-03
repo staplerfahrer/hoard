@@ -19,6 +19,7 @@ copy %src%\handle_request.py         %dst%
 copy %src%\handle_thumbnail.py       %dst%
 copy %src%\log.py                    %dst%
 copy %src%\main.py                   %dst%
+copy %src%\plugins.py                %dst%
 copy %src%\resources.py              %dst%
 copy %src%\requirements.txt          %dst%
 copy %src%\stats.py                  %dst%
@@ -28,6 +29,7 @@ copy %src%\thumbnail.html            %dst%
 set src=%src%\resources
 set dst=%dst%\resources
 md %dst%
+copy %src%\DejaVuSansMono.ttf        %dst%
 copy %src%\Enso.png                  %dst%
 copy %src%\Enso.png_LICENSE          %dst%
 copy %src%\favicon.svg               %dst%
@@ -35,6 +37,10 @@ copy %src%\hoard3.png                %dst%
 copy %src%\style.css                 %dst%
 copy %src%\thumbnail-placeholder.png %dst%
 copy %src%\viewer-mask.png           %dst%
+
+:: render plugins (drop-in .py files)
+md _deploy\hoard\plugins
+copy hoard\plugins\*.py              _deploy\hoard\plugins
 
 set dst=_deploy
 explorer %dst%
