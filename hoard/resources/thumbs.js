@@ -1,0 +1,157 @@
+const thumbs = (function(){
+	const ports = boot.config.thumbnailPorts
+
+	let viewerState = {}
+
+	function addViewerState(vs) {
+		viewerState = vs
+	}
+
+	function setThumbnailStyle() {
+		const thumbnailWidthHeight = boot.config.thumbnailWidthHeight
+		const sheetContents = document.createTextNode(`
+			.tn {
+				width  : ${thumbnailWidthHeight[0]}px;
+				height : ${thumbnailWidthHeight[1]}px;
+			}
+
+			#siblings, #children {
+				width  : ${thumbnailWidthHeight[0]}px;
+				height : ${thumbnailWidthHeight[1]}px;
+			}
+
+			#thumbnailContainer {
+				grid-template-columns: repeat(auto-fill, ${thumbnailWidthHeight[0]}px);
+			}
+
+			.tn-wrap {
+				width  : ${thumbnailWidthHeight[0]}px;
+				height : ${thumbnailWidthHeight[1]}px;
+			}
+		`)
+		const sheet = document.createElement('style')
+		sheet.appendChild(sheetContents)
+		document.body.appendChild(sheet)
+	}
+
+	function add(url, i) {
+		const img = document.createElement('img')
+		img.classList.add('tn')
+		img.classList.add('tn-loading')
+		img.alt = decodeURIComponent(url)
+		img.title = decodeURIComponent(url)
+		img.setAttribute('data-index', i)
+		img.setAttribute('data-src', `${
+			location.protocol}//${
+			window.location.hostname}:${
+			ports[i % ports.length]}${
+			url}?tn`)
+		img.setAttribute('src', '/thumbnail-placeholder.png')
+		img.onclick = toggleZoom
+		const par = document.getElementById('thumbnailContainer')
+		if (viewerState.recursive) {
+			// wrap so we can caption the file's subfolder (relative to the current dir)
+			const wrap = document.createElement('div')
+			wrap.classList.add('tn-wrap')
+			wrap.appendChild(img)
+			const rel = relativeFolder(url)
+			if (rel) {
+				const caption = document.createElement('div')
+				caption.classList.add('tn-caption')
+				caption.innerText = rel
+				caption.title = rel
+				wrap.appendChild(caption)
+			}
+			par.appendChild(wrap)
+		} else {
+			par.appendChild(img)
+		}
+		viewerState.imgElms.push(img)
+	}
+
+	function relativeFolder(url) {
+		// subfolder of url relative to the current directory, sans filename ('' if directly inside)
+		const base = decodeURIComponent(window.location.pathname).replace(/\/+$/, '')
+		const p = decodeURIComponent(url)
+		const slash = p.lastIndexOf('/')
+		let dir = slash >= 0 ? p.slice(0, slash) : ''
+		if (dir.startsWith(base)) dir = dir.slice(base.length)
+		return dir.replace(/^\/+/, '')
+	}
+
+	function load(i) {
+		const img = viewerState.imgElms[i]
+		if (img._requested)
+			return
+		img._requested = true
+		try {
+			img.setAttribute('src', img.getAttribute('data-src'))
+			img.removeAttribute('data-src')
+			img.onload = (e) => {
+				e.target.classList.remove('tn-loading')
+				// e.target.classList.add('tn-fade-in')
+				e.target._loaded = true
+			}
+			img.onerror = (e) => {
+				console.log(e)
+				img.classList.remove('tn-loading')
+				img._loaded = true
+			}
+		} catch (e) {
+			console.log(e)
+			img.classList.remove('tn-loading')
+			img._loaded = true
+		}
+	}
+
+	function loadVisibleThumbs() {
+		const fps = 10
+
+		for (var i = viewerState.lowestPending; i < viewerState.imgElms.length; i++) {
+			var img = viewerState.imgElms[i]
+			if (!isVisible(img))
+				continue
+			load(i)
+		}
+
+		// An optimization.
+		// From top down, while requested: these thumbs are no longer pending.
+		while (viewerState.lowestPending < viewerState.imgElms.length
+				&& viewerState.imgElms[viewerState.lowestPending]._requested)
+			viewerState.lowestPending++
+
+		// schedule next
+		window.setTimeout(loadVisibleThumbs, 1000/fps)
+	}
+
+	function loadThumbsRandomly() {
+		const fps = 60
+
+		if (window.busyScrolling)
+			// schedule next
+			return window.setTimeout(loadThumbsRandomly, fps)
+
+		let next = viewerState.lowestPending + Math.floor(
+			(Math.random() ** 1.6) * (viewerState.imgElms.length - viewerState.lowestPending + 1))
+
+		while (next < viewerState.imgElms.length && viewerState.imgElms[next]._requested)
+			next++
+
+		if (next == viewerState.imgElms.length && !viewerState.imgElms.some(x => !x._requested))
+			return
+
+		if (next < viewerState.imgElms.length)
+			load(next)
+
+		// schedule next
+		window.setTimeout(loadThumbsRandomly, 1000/fps)
+	}
+
+	return {
+		addViewerState: addViewerState,
+		setThumbnailStyle: setThumbnailStyle,
+		add: add,
+		loadVisible: loadVisibleThumbs,
+		loadRandomly: loadThumbsRandomly,
+	}
+})()

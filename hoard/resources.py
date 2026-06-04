@@ -8,6 +8,7 @@ RESOURCE_MIMES: dict[str, str] = {
 	'.svg': 'image/svg+xml',
 	'.png': 'image/png',
 	'.css': 'text/css',
+	'.js' : 'text/javascript',
 }
 
 resource_cache: dict[str, Tuple[bytes, str]] = {}

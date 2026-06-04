@@ -49,7 +49,7 @@ def test_path_outside_any_root_maps_to_slash(tmp_path):
 	('clip.mp4',   fs.KIND_VIDEO),
 	('clip.mov',   fs.KIND_VIDEO),
 	('doc.pdf',    fs.KIND_PDF),
-	('notes.txt',  fs.KIND_UNVIEWABLE),
+	#('notes.txt',  fs.KIND_UNVIEWABLE), # supported by the plugin
 	('music.mp3',  fs.KIND_UNVIEWABLE),
 	('noext',      fs.KIND_UNVIEWABLE),
 ])

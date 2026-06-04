@@ -24,7 +24,6 @@ copy %src%\resources.py              %dst%
 copy %src%\requirements.txt          %dst%
 copy %src%\stats.py                  %dst%
 copy %src%\start.bat                 %dst%
-copy %src%\thumbnail.html            %dst%
 
 set src=%src%\resources
 set dst=%dst%\resources
@@ -33,9 +32,11 @@ copy %src%\DejaVuSansMono.ttf        %dst%
 copy %src%\Enso.png                  %dst%
 copy %src%\Enso.png_LICENSE          %dst%
 copy %src%\favicon.svg               %dst%
+copy %src%\gallery.js                %dst%
 copy %src%\hoard3.png                %dst%
 copy %src%\style.css                 %dst%
 copy %src%\thumbnail-placeholder.png %dst%
+copy %src%\thumbs.js                 %dst%
 copy %src%\viewer-mask.png           %dst%
 
 :: render plugins (drop-in .py files)

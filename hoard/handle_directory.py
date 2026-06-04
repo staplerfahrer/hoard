@@ -90,31 +90,34 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 
 		tick('client_siblings')
 
-	# produce HTML
+	# produce HTML — a small shell carrying one bootstrap data island; the viewer
+	# and thumbnail JS live in cached /gallery.js + /thumbs.js (loaded via <script src>)
 	gallery_html = fs.read_file_bytes('gallery.html')[0]
 	tick('read gallery_html')
 
-	thumbnail_html = fs.read_file_bytes('thumbnail.html')[0]
-	tick('read thumbnail_html')
-	data = (gallery_html
-		.replace(b'{thumbnailHtml}', thumbnail_html)
-		.replace(b'{thumbnailPorts}', bytes(json.dumps(config('thumbnailPorts')), 'utf-8'))
-		.replace(b'{thumbnailWidthHeight}', bytes(json.dumps(config('thumbnailWidthHeight')), 'utf-8'))
-		)
-
-	data = (data
-		.replace(b'{allowDelete}', b'true' if config('allowDelete') else b'false')
-		.replace(b'{displayUnrenderables}', b'true' if config('displayUnrenderables') else b'false')
-		.replace(b'{preferAltNavigation}', b'true' if config('preferAltNavigation') else b'false')
-		.replace(b'{recursive}', b'true' if recursive else b'false')
-		.replace(b'{autoPlayTimer}', bytes(str(config('autoPlayTimer')), 'utf-8'))
-		.replace(b'{dirUrls}', bytes(json.dumps(client_children), 'utf-8'))
-		.replace(b'{imgUrls}', bytes(json.dumps(img_urls), 'utf-8'))
-		.replace(b'{kinds}', bytes(json.dumps(kinds), 'utf-8'))
-		.replace(b'{scrollRateLimitMs}', bytes(str(config('scrollRateLimitMs')), 'utf-8'))
-		.replace(b'{siblingUrls}', bytes(json.dumps(client_siblings), 'utf-8'))
-		.replace(b'{zoomSpeed}', bytes(config('zoomSpeed'), 'utf-8'))
-		)
+	bootstrap = json.dumps({
+		'config': {                          # static; identical for every directory
+			'thumbnailPorts'      : config('thumbnailPorts'),
+			'thumbnailWidthHeight': config('thumbnailWidthHeight'),
+			'zoomSpeed'           : config('zoomSpeed'),
+			'scrollRateLimitMs'   : config('scrollRateLimitMs'),
+			'autoPlayTimer'       : config('autoPlayTimer'),
+			'allowDelete'         : config('allowDelete'),
+			'displayUnrenderables': config('displayUnrenderables'),
+			'preferAltNavigation' : config('preferAltNavigation'),
+		},
+		'data': {                            # per-directory
+			'imgUrls'    : img_urls,
+			'kinds'      : kinds,
+			'dirUrls'    : client_children,
+			'siblingUrls': client_siblings,
+			'recursive'  : recursive,
+		},
+	})
+	# escape '<' so a filename containing '</script>' can't break out of the island
+	# (JSON.parse decodes < back to '<' client-side)
+	bootstrap = bootstrap.replace('<', '\\u003c')
+	data = gallery_html.replace(b'{bootstrap}', bootstrap.encode('utf-8'))
 	tick('template')
 	return data, 'text/html'
 
