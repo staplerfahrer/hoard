@@ -37,6 +37,7 @@ import stats
 # TODO: fix video player keyboard seek
 # TODO: fix video hotkeys (keyboard controls are wildly inconsistent)
 # TODO: when switching to full screen, maybe show thumbnail until the large image has loaded, or some busy indicator
+# TODO: clicking video while full-screen should pause it
 
 THREAD_COUNT = 30
 

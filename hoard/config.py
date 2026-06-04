@@ -26,3 +26,10 @@ def config(name: str) -> Any:
 	except:
 		log(traceback.format_exc())
 		raise
+
+
+def load(values: dict[str, Any]) -> None:
+	"""Inject a config dict directly, bypassing config.json. Intended for tests."""
+	global cached, config_cache
+	config_cache = values
+	cached       = True

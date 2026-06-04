@@ -10,10 +10,9 @@ body {
 	background-size      : contain;
 	background-attachment: fixed;
 	overflow-y           : scroll;
-	background-image     : url(hoard3.png);
+	background-image     : url(background.png);
 	background-position  : center;
-	background-size      : contain;
-	background-blend-mode: color-dodge;
+	background-size      : cover;
 }
 
 *::-webkit-scrollbar {
@@ -191,20 +190,21 @@ a {
 }
 
 .tn-caption {
-	position     : absolute;
-	top          : 0;
-	left         : 0;
-	right        : 0;
-	padding      : 3px 6px;
-	font-size    : 14px;
-	color        : #e6e6e6;
-	background   : linear-gradient(#000000b3, #00000000);
-	white-space  : nowrap;
-	overflow     : hidden;
-	text-overflow: ellipsis;
+	position      : absolute;
+	top           : 0;
+	left          : 0;
+	right         : 0;
+	padding       : 3px 6px;
+	font-size     : 14px;
+	color         : #e6e6e6;
+	background    : #2524226e;
+	white-space   : nowrap;
+	overflow      : hidden;
+	text-overflow : ellipsis;
+	text-align    : center;
 	pointer-events: none;
-	text-shadow  : 0 0 2px black, 0 0 4px black;
-	border-radius: 4px 4px 0 0;
+	text-shadow   : 0 0 2px black, 0 0 4px black;
+	border-radius : 4px 4px 0 0;
 }
 
 

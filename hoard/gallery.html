@@ -552,7 +552,7 @@
 				a.href      = url
 				a.onclick   = navigate // todo: ugh
 				a.innerText = decodeURI(url.split('/').at(-1) || url)
-				if (url === window.location.pathname) {
+				if (url === decodeURI(window.location.pathname)) {
 					a.classList.add('active')
 				}
 				return a

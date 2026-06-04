@@ -135,13 +135,14 @@ def roots() -> list[tuple[str, str]]:
 
 
 def to_client_path(file_path: str) -> str:
+	safe = '/, &' # TODO: fix path highlighting and where exactly encoding is needed or not
 	abs_path = os.path.abspath(file_path)
 	for name, root_path in roots():
 		if abs_path == root_path:
-			return '/' + urlparse.quote(name, safe='')
+			return '/' + urlparse.quote(name, safe=safe)
 		if abs_path.startswith(root_path + os.sep):
 			rel = abs_path[len(root_path):].replace(os.sep, '/')
-			return urlparse.quote(f'/{name}{rel}', safe='/,')
+			return urlparse.quote(f'/{name}{rel}', safe=safe)
 	return '/'
 
 
