@@ -322,23 +322,45 @@ function changeAutoPlay(option) {
 	}
 }
 
+// The element actually laid out as a grid cell for a thumbnail: the .tn-wrap in the
+// recursive '?all' view, otherwise the <img> itself. Measuring the <img> directly
+// breaks in recursive view — each img sits in a position:relative .tn-wrap, so its
+// offsetTop is 0 relative to that wrapper instead of reflecting its grid row.
+function cellOf(img) {
+	const p = img.parentElement
+	return p && p.classList.contains('tn-wrap') ? p : img
+}
+
 function imagesPerRow() {
-	if (viewerState.imgElms.length === 0) return 1
-	let firstTop = viewerState.imgElms[0].offsetTop
-	// skip first row
+	const n = viewerState.imgElms.length
+	if (n === 0) return 1
+	const cells = viewerState.imgElms.map(cellOf)
+	// skip the first thumbnail row: it's short by two cells because #siblings and
+	// #children share the grid. The second row is full, giving the true column count.
+	const firstTop = cells[0].offsetTop
 	let i = 0
-	while (i < viewerState.imgElms.length) {
-		if (viewerState.imgElms[i].offsetTop > firstTop) break
-		i++
-	}
+	while (i < n && cells[i].offsetTop === firstTop) i++
+	if (i >= n) return n            // only one thumbnail row
+	const rowTop = cells[i].offsetTop
 	let count = 0
-	firstTop = viewerState.imgElms[i].offsetTop
-	while (i < viewerState.imgElms.length) {
-		if (viewerState.imgElms[i].offsetTop > firstTop) break
-		i++
-		count++
-	}
+	while (i < n && cells[i].offsetTop === rowTop) { i++; count++ }
 	return count || 1
+}
+
+// number of thumbnails in one viewport-height "page" (columns × visible rows)
+function thumbsPerPage() {
+	const n = viewerState.imgElms.length
+	if (n === 0) return 1
+	const cells = viewerState.imgElms.map(cellOf)
+	const perRow = imagesPerRow()
+	// row stride = offsetTop gap to the next row (includes the CSS grid gap); fall
+	// back to a cell's own height when everything fits on a single row
+	const firstTop = cells[0].offsetTop
+	let k = 0
+	while (k < n && cells[k].offsetTop === firstTop) k++
+	const stride = k < n ? cells[k].offsetTop - firstTop : cells[0].offsetHeight
+	const rows = Math.max(1, Math.floor(window.innerHeight / stride))
+	return perRow * rows
 }
 
 // nearest index (from start, inclusive) the viewer can display, scanning
@@ -691,26 +713,16 @@ function bindEvents() {
 			viewerState.viewedIndex = viewerState.imgUrls.length - 1
 			updateViewed()
 		}
-		// page up/down
+		// page up/down — jump a full screen of thumbnails
 		else if (e.key == 'PageUp') {
 			e.preventDefault()
-			let tn = document.querySelector('.tn')
-			if (!tn) return
-			let height = Number(getComputedStyle(tn).height.replace(/[^0-9]+/,''))
-			let rows = Math.floor(window.innerHeight / height)
-			let skip = imagesPerRow() * rows
-			viewerState.viewedIndex = Math.max(viewerState.viewedIndex - skip, 0)
-			updateViewed()
+			viewerState.viewedIndex = Math.max(viewerState.viewedIndex - thumbsPerPage(), 0)
+			updateViewed(-1)
 		}
 		else if (e.key == 'PageDown') {
 			e.preventDefault()
-			let tn = document.querySelector('.tn')
-			if (!tn) return
-			let height = Number(getComputedStyle(tn).height.replace(/[^0-9]+/,''))
-			let rows = Math.floor(window.innerHeight / height)
-			let skip = imagesPerRow() * rows
-			viewerState.viewedIndex = Math.min(viewerState.viewedIndex + skip, viewerState.imgUrls.length - 1)
-			updateViewed()
+			viewerState.viewedIndex = Math.min(viewerState.viewedIndex + thumbsPerPage(), viewerState.imgUrls.length - 1)
+			updateViewed(1)
 		}
 		// arrow keys
 		else if (e.key == 'ArrowLeft' ) {
