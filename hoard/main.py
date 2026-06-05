@@ -48,8 +48,24 @@ busy_thread_count: int                       = 0
 busy_thread_lock : threading.Lock            = threading.Lock()
 
 
+def _log_thread_exception(args: threading.ExceptHookArgs) -> None:
+	"""Send uncaught exceptions from any thread to the log file.
+
+	The default hook prints them to stderr, where the ui() repaint (cursor-up +
+	rewrite at 60fps) overwrites them — so they flash on the terminal and are lost.
+	Routing them to log.txt makes them readable after the fact.
+	"""
+	if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+		return
+	tb = ''.join(traceback.format_exception(
+		args.exc_type, args.exc_value, args.exc_traceback))
+	name = args.thread.name if args.thread else '<unknown>'
+	log(f'Uncaught exception in thread {name}:\n{tb}')
+
+
 def main():
 	try:
+		threading.excepthook = _log_thread_exception
 		os.system('cls' if WINDOWS else 'clear')
 		check_dependencies()
 		if config('autoStart'):
@@ -171,46 +187,54 @@ def ui():
 	# when bound to all interfaces, list every reachable URL; the title shows the primary one
 	addresses_line = '' if len(urls) <= 1 else 'Reachable at  ' + '   '.join(urls) + '\n'
 	while True:
-		sleep(sec_per_frame)
-		cols  = get_terminal_size().columns - 1
-		title = f' hoard Media Gallery serving at {urls[0]} '
-		pad   = (cols - len(title)) // 2
-		title = f'{"=" * pad}{title}{"=" * pad}'
-		request_queue = len(queue) + len(thumbnail_queue)
-		with busy_thread_lock:
-			busy_workers = busy_thread_count
-		with stats.lock:
-			tn  = stats.thumbnails_served
-			b   = stats.bytes_served
-			pt  = stats.processing_time
-			rq  = stats.requests_served
-		req_sec = (rq - last_rq) / sec_per_frame
-		req_sec_avg = req_sec * 0.005 + req_sec_avg * 0.995
-		last_rq = rq
-		stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {req_sec_avg:.0f} req/s'
-		content = (
-			f'{title}\n'
-			f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
-			f'{addresses_line}'
-			f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
-			f'\r\033[K{busy_workers :>4} workers {"W" * min(busy_workers, cols - 20)}\n'
-			f'\r\033[K{stats_line}\n'
-		)
-		sys.stdout.write(f'\033[{content.count(chr(10))}A' + content)
-		sys.stdout.flush()
+		try:
+			sleep(sec_per_frame)
+			cols  = get_terminal_size().columns - 1
+			title = f' hoard Media Gallery serving at {urls[0]} '
+			pad   = (cols - len(title)) // 2
+			title = f'{"=" * pad}{title}{"=" * pad}'
+			request_queue = len(queue) + len(thumbnail_queue)
+			with busy_thread_lock:
+				busy_workers = busy_thread_count
+			with stats.lock:
+				tn  = stats.thumbnails_served
+				b   = stats.bytes_served
+				pt  = stats.processing_time
+				rq  = stats.requests_served
+			req_sec = (rq - last_rq) / sec_per_frame
+			req_sec_avg = req_sec * 0.005 + req_sec_avg * 0.995
+			last_rq = rq
+			stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {req_sec_avg:.0f} req/s'
+			content = (
+				f'{title}\n'
+				f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
+				f'{addresses_line}'
+				f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
+				f'\r\033[K{busy_workers :>4} workers {"W" * min(busy_workers, cols - 20)}\n'
+				f'\r\033[K{stats_line}\n'
+			)
+			sys.stdout.write(f'\033[{content.count(chr(10))}A' + content)
+			sys.stdout.flush()
+		except Exception:
+			# log to file (not stderr — this loop would overwrite it) and keep going
+			log(f'ui() exception {traceback.format_exc()}')
+			sleep(1)  # don't spin a tight error loop hammering the log
 
 
 def hotkey_listener():
 	if WINDOWS:
 		import msvcrt
 		while True:
-			sleep(0.05)
-			if not msvcrt.kbhit():
-				continue
-			ch = msvcrt.getwch()
-			if ch == '\x12':  # Ctrl+R
-				log('Restarting...')
-				os.execv(sys.executable, [sys.executable] + sys.argv)
+			try:
+				sleep(0.05)
+				if not msvcrt.kbhit():
+					continue
+				ch = msvcrt.getwch()
+				if ch == '\x12':  # Ctrl+R
+					log('Restarting...')
+					os.execv(sys.executable, [sys.executable] + sys.argv)
+			except Exception:
+				log(f'hotkey_listener() exception {traceback.format_exc()}')
 	else:
 		if not sys.stdin.isatty():
 			return
@@ -228,7 +252,7 @@ def hotkey_listener():
 						log('Restarting...')
 						os.execv(sys.executable, [sys.executable] + sys.argv)
 		except Exception:
-			pass
+			log(f'hotkey_listener() exception {traceback.format_exc()}')
 		finally:
 			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)              # type: ignore
 
