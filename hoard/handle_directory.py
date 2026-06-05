@@ -7,6 +7,7 @@ import re
 from config import config, WINDOWS
 from log import log
 import filesystem as fs
+import flags
 
 if WINDOWS:
     import ctypes
@@ -20,7 +21,7 @@ else:
         return [int(p) if p.isdigit() else p for p in parts]
     _sort_key = _natural_sort_key
 
-BLOCK_LIST = [r'thumbs.db$', r'.deleted$', r'\.xmp$', r'desktop\.ini$', r'\.mylock_', r'\.lnk$']
+BLOCK_LIST = [r'thumbs.db$', r'.deleted$', r'\.xmp$', r'desktop\.ini$', r'\.mylock_', r'\.lnk$', r'[\\/]notes\.txt$']
 
 def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 	t = perf_counter()
@@ -38,6 +39,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		client_children = [fs.to_client_path(p) for _, p in all_roots]
 		img_urls        = []
 		kinds           = ''
+		file_flags      = ''
 		client_siblings = []
 		tick('virtual root')
 
@@ -70,6 +72,8 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		img_urls        = [fs.to_client_path(f) for f in file_list]
 		# one char per file (same order as img_urls): viewer KIND_* code
 		kinds           = ''.join(str(fs.classify(f)) for f in file_list)
+		# one char per file: pick/reject/none flag ('p'/'r'/'n')
+		file_flags      = _file_flags(file_list)
 		tick('client_children/imgUrls')
 
 		# ── Case 2: at a configured root dir — siblings = other roots ────────
@@ -109,6 +113,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		'data': {                            # per-directory
 			'imgUrls'    : img_urls,
 			'kinds'      : kinds,
+			'flags'      : file_flags,
 			'dirUrls'    : client_children,
 			'siblingUrls': client_siblings,
 			'recursive'  : recursive,
@@ -125,6 +130,21 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 # def _natural_key(path: str):
 # 	parts = re.split(r'(\d+)', os.path.basename(path).lower())
 # 	return [int(p) if p.isdigit() else p for p in parts]
+
+
+def _file_flags(file_list: list[str]) -> str:
+	"""Packed one-char flag state per file, mirroring img_urls order.
+
+	Reads each directory's flag map once (the recursive view spans many dirs).
+	"""
+	cache: dict[str, dict[str, str]] = {}
+	out: list[str] = []
+	for f in file_list:
+		directory = os.path.dirname(f)
+		if directory not in cache:
+			cache[directory] = flags.read_flags(directory)
+		out.append(flags.flag_char(cache[directory], os.path.basename(f)))
+	return ''.join(out)
 
 
 def _walk_files(root: str) -> list[str]:

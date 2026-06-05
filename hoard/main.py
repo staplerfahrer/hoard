@@ -20,10 +20,11 @@ import stats
 # TODO: index all file names in the library on startup (walk the root dirs, store
 #       relative paths in a list/trie) and expose a search endpoint; add a search
 #       box to the gallery UI that queries it and navigates to matches.
-# TODO: add per-file flags (selected / rejected / none); persist via sidecar or
-#       rename suffix; expose set/clear endpoint; show flag state in the viewer UI.
-# TODO: store user-generated metadata (flags, notes, etc.) in a notes.txt file
-#       per directory; create/update the file only when a directory has metadata.
+# DONE: per-file flags (pick / reject / none) — flags.py persists a per-directory
+#       notes.txt (YAML), handle_flag.py serves GET <file>?flag=<state>, and the
+#       viewer cycles state with the 'p' hotkey / bar button (see flags.py).
+# TODO: store other user-generated metadata (notes, ratings, etc.) alongside flags
+#       in the per-directory notes.txt; create/update it only when present.
 # TODO: manual zoom (scroll wheel / pinch) and drag-to-pan for the image viewer.
 # TODO: allow renaming of images from the viewer UI; expose a rename endpoint.
 # TODO: allow moving images to another directory from the viewer UI; expose a move endpoint.

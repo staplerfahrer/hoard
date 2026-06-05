@@ -35,6 +35,9 @@ const thumbs = (function(){
 	}
 
 	function add(url, i) {
+		// with no configured thumbnail ports, reuse the page's own port (location.port
+		// is '' on the default port 80/443); window.location.hostname omits the port
+		const port = ports.length ? `:${ports[i % ports.length]}` : (location.port ? `:${location.port}` : '')
 		const img = document.createElement('img')
 		img.classList.add('tn')
 		img.classList.add('tn-loading')
@@ -43,8 +46,7 @@ const thumbs = (function(){
 		img.setAttribute('data-index', i)
 		img.setAttribute('data-src', `${
 			location.protocol}//${
-			window.location.hostname}:${
-			ports[i % ports.length]}${
+			window.location.hostname}${port}${
 			url}?tn`)
 		img.setAttribute('src', '/thumbnail-placeholder.png')
 		img.onclick = toggleZoom

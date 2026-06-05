@@ -12,9 +12,11 @@ copy README.md %dst%
 copy %src%\config.json.example       %dst%
 copy %src%\config.py                 %dst%
 copy %src%\filesystem.py             %dst%
+copy %src%\flags.py                  %dst%
 copy %src%\gallery.html              %dst%
 copy %src%\handle_directory.py       %dst%
 copy %src%\handle_file.py            %dst%
+copy %src%\handle_flag.py            %dst%
 copy %src%\handle_request.py         %dst%
 copy %src%\handle_thumbnail.py       %dst%
 copy %src%\log.py                    %dst%

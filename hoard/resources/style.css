@@ -10,7 +10,7 @@ body {
 	background-size      : contain;
 	background-attachment: fixed;
 	overflow-y           : scroll;
-	background-image     : url(background.png);
+	background-image     : url(background.jpg);
 	background-position  : center;
 	background-size      : cover;
 }
@@ -40,7 +40,7 @@ a {
 	left                 : 0;
 	right                : 0;
 	display              : grid;
-	grid-template-columns: 1fr 1fr 1fr auto 3fr;
+	grid-template-columns: 4fr 4fr 4fr 1fr 1fr 8fr;
 	align-items          : center;
 	z-index              : 8;
 	backdrop-filter      : blur(12px);
@@ -51,8 +51,8 @@ a {
 	text-shadow: 0 0 1px black, 0 0 2px black, 0 0 4px black, 0 0 8px black, 0 0 16px black, 0 0 32px black;
 }
 
-#navPrevious, #navUp, #navNext, #navAll,
-#navPrevious:visited, #navUp:visited, #navNext:visited, #navAll:visited {
+#navPrevious, #navUp, #navNext, #navAll, #flagButton,
+#navPrevious:visited, #navUp:visited, #navNext:visited, #navAll:visited, #flagButton:visited {
 	color: #c09300;
 	text-align: center;
 	padding: 5px 0px;
@@ -77,7 +77,7 @@ a {
 	background-color: #c09300;
 }
 
-#navPrevious:hover, #navUp:hover, #navNext:hover, #navAll:hover {
+#navPrevious:hover, #navUp:hover, #navNext:hover, #navAll:hover, #flagButton:hover {
 	background-color: #ffffff10;
 }
 
@@ -85,8 +85,24 @@ a {
 	background-color: #dab028;
 }
 
-#navPrevious:focus, #navUp:focus, #navNext:focus, #navAll:focus {
+#navPrevious:focus, #navUp:focus, #navNext:focus, #navAll:focus, #flagButton:focus {
 	outline-color: #dab028;
+}
+
+/* flag button: reflects the selected file's state (none / pick / reject) */
+#flagButton {
+	padding: 5px 12px;
+	cursor : pointer;
+}
+
+#flagButton.flag-pick {
+	color           : #1c1b19;
+	background-color: oklch(0.68 0.17 145); /* green */
+}
+
+#flagButton.flag-reject {
+	color           : #1c1b19;
+	background-color: oklch(0.58 0.20 27);  /* red */
 }
 
 .nav-hidden {
@@ -306,4 +322,15 @@ a {
 /* ACTIVE STATE //////////////////////////////////////////////////////////////*/
 .selection-outline {
 	outline-color: oklch(0.6588 0.1061 82.79);
+}
+
+/* FLAGS /////////////////////////////////////////////////////////////////////*/
+/* recolour the thumbnail outline; higher specificity than .selection-outline,
+   so a flagged thumbnail shows its flag colour even while it's the viewed one */
+.tn.flag-pick {
+	outline-color: oklch(0.68 0.17 145); /* green */
+}
+
+.tn.flag-reject {
+	outline-color: oklch(0.58 0.20 27);  /* red */
 }

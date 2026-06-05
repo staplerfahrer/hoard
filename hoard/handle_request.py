@@ -5,6 +5,7 @@ import os
 import filesystem as fs
 import handle_directory
 import handle_file
+import handle_flag
 import handle_thumbnail
 from log import log
 from config import config, WINDOWS, MACOS
@@ -43,6 +44,9 @@ def build_response_bytes(req: str) -> bytes:
 
 	elif req_server_path.endswith('?explorer'):
 		data, mime = _open_explorer(req_server_path)
+
+	elif '?flag=' in req_server_path:
+		data, mime = handle_flag.run(req_server_path)
 
 	else:
 		result = handle_file.run(req_server_path, range_l, range_u)

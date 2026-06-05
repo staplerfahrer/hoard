@@ -17,6 +17,7 @@ const viewerState = {
 	viewedIndex          : 0,
 	imgUrls              : boot.data.imgUrls,
 	kinds                : boot.data.kinds, // one char per imgUrl: KIND_* code
+	flags                : boot.data.flags, // one char per imgUrl: FLAG_* code
 	recursive            : boot.data.recursive, // show-all-subfolders view
 	dirUrls              : boot.data.dirUrls,
 	imgElms              : [],
@@ -44,6 +45,14 @@ const KIND_IMAGE      = '1'
 const KIND_VIDEO      = '2'
 const KIND_PDF        = '3'
 
+// per-file flag states — mirror flags.py (packed in viewerState.flags); pressing
+// 'p' (or the bar button) cycles a file none → pick → reject → none
+const FLAG_NONE   = 'n'
+const FLAG_PICK   = 'p'
+const FLAG_REJECT = 'r'
+const FLAG_CYCLE  = { [FLAG_NONE]: FLAG_PICK, [FLAG_PICK]: FLAG_REJECT, [FLAG_REJECT]: FLAG_NONE }
+const FLAG_STATE  = { [FLAG_NONE]: 'none', [FLAG_PICK]: 'pick', [FLAG_REJECT]: 'reject' }
+
 vb = document.getElementById('viewBox')
 vi = document.getElementById('viewImg')
 vi2 = document.getElementById('viewImg2')
@@ -61,13 +70,16 @@ function buildDom() {
 	if (!displayUnrenderables) {
 		const keptUrls = []
 		let keptKinds = ''
+		let keptFlags = ''
 		for (let i = 0; i < viewerState.imgUrls.length; i++) {
 			if (viewerState.kinds[i] === KIND_UNVIEWABLE) continue
 			keptUrls.push(viewerState.imgUrls[i])
 			keptKinds += viewerState.kinds[i]
+			keptFlags += viewerState.flags[i]
 		}
 		viewerState.imgUrls = keptUrls
 		viewerState.kinds = keptKinds
+		viewerState.flags = keptFlags
 	}
 
 	const beautifyLabel = (l) => l.replace(/^\//, '').replaceAll('/', '▹')
@@ -80,10 +92,11 @@ function buildDom() {
 	document.getElementById('titleContainer').innerHTML = title2
 
 	viewerState.imgUrls.forEach(thumbs.add)
+	for (let i = 0; i < viewerState.imgElms.length; i++) applyFlag(i)
 
 	buildDirectoryGrid(siblingUrls, viewerState.dirUrls)
 
-	let cur = window.location.pathname;
+	let cur = decodeURIComponent(window.location.pathname)
 	let idx = siblingUrls.indexOf(cur)
 
 	const np = document.getElementById('navPrevious')
@@ -346,6 +359,7 @@ function updateViewed(dir = 1) {
 
 	updateCookie(window.location.href, viewerState.viewedIndex)
 	borderViewed()
+	updateFlagButton()
 	if (!window.zoomed) return
 
 	// update & display
@@ -565,6 +579,41 @@ function borderViewed() {
 	}
 }
 
+//#region MARK:flags
+// reflect a file's flag on its thumbnail (FLAG_NONE clears it)
+function applyFlag(i) {
+	const el = viewerState.imgElms[i]
+	if (!el) return
+	el.classList.remove('flag-pick', 'flag-reject')
+	const f = viewerState.flags[i]
+	if (f === FLAG_PICK)   el.classList.add('flag-pick')
+	else if (f === FLAG_REJECT) el.classList.add('flag-reject')
+}
+
+// paint the bar button with the currently-viewed file's flag state
+function updateFlagButton() {
+	const fb = document.getElementById('flagButton')
+	if (!fb) return
+	const f = viewerState.flags[viewerState.viewedIndex] || FLAG_NONE
+	fb.classList.remove('flag-pick', 'flag-reject')
+	if (f === FLAG_PICK)   fb.classList.add('flag-pick')
+	else if (f === FLAG_REJECT) fb.classList.add('flag-reject')
+}
+
+// advance the viewed file's flag (none → pick → reject → none) and persist it
+function cycleFlag() {
+	const i = viewerState.viewedIndex
+	if (i < 0 || i >= viewerState.imgUrls.length) return
+	const next = FLAG_CYCLE[viewerState.flags[i] || FLAG_NONE]
+	viewerState.flags = viewerState.flags.slice(0, i) + next + viewerState.flags.slice(i + 1)
+	applyFlag(i)
+	updateFlagButton()
+	fetch(viewerState.imgUrls[i] + '?flag=' + FLAG_STATE[next]).then(r => r.text()).then(result => {
+		if (result !== 'ok') console.log('flag failed:', result)
+	})
+}
+//#endregion
+
 function cacheNextImages() {
 	window.setTimeout(() => {
 		for (let i = 0; i < 10; i++) {
@@ -590,10 +639,12 @@ function bindEvents() {
 		document.documentElement.scrollTop = 0
 	}
 
+	document.getElementById('flagButton').onclick = cycleFlag
+
 	// prevent accidental dragging of clickable elements
-	[vi, vi2, vi3].forEach((tn) => {
-		tn.ondragstart = (e) => e.preventDefault()
-	})
+	vi.ondragstart  = (e) => e.preventDefault()
+	vi2.ondragstart = (e) => e.preventDefault()
+	vi3.ondragstart = (e) => e.preventDefault()
 	document.querySelectorAll('.tn, a').forEach((tn) => {
 		tn.ondragstart = (e) => e.preventDefault()
 	})
@@ -708,6 +759,7 @@ function bindEvents() {
 					viewerState.imgElms.splice(idx, 1)
 					viewerState.imgUrls.splice(idx, 1)
 					viewerState.kinds = viewerState.kinds.slice(0, idx) + viewerState.kinds.slice(idx + 1)
+					viewerState.flags = viewerState.flags.slice(0, idx) + viewerState.flags.slice(idx + 1)
 					if (idx < viewerState.lowestPending) viewerState.lowestPending--
 					for (let i = idx; i < viewerState.imgElms.length; i++)
 						viewerState.imgElms[i].setAttribute('data-index', i)
@@ -721,6 +773,10 @@ function bindEvents() {
 		// explorer
 		else if (e.key == 'e') {
 			fetch(viewerState.imgUrls[viewerState.viewedIndex] + '?explorer')
+		}
+		// flag: cycle none → pick → reject → none
+		else if (e.key == 'p') {
+			cycleFlag()
 		}
 	}
 
@@ -834,4 +890,5 @@ thumbs.loadVisible()
 thumbs.loadRandomly()
 bindEvents()
 borderViewed()
+updateFlagButton()
 //#endregion
