@@ -53,6 +53,15 @@ const FLAG_REJECT = 'r'
 const FLAG_CYCLE  = { [FLAG_NONE]: FLAG_PICK, [FLAG_PICK]: FLAG_REJECT, [FLAG_REJECT]: FLAG_NONE }
 const FLAG_STATE  = { [FLAG_NONE]: 'none', [FLAG_PICK]: 'pick', [FLAG_REJECT]: 'reject' }
 
+// Canonical comparison for two URL paths: compare their fully-DECODED forms, so a
+// match is independent of which encoder (Python's quote vs the browser) produced
+// the percent-escapes. Use decodeURIComponent (not decodeURI) so reserved chars
+// like %26 '&' and %23 '#' decode too — the same reason labels use it.
+function samePath(a, b) {
+	try { return decodeURIComponent(a) === decodeURIComponent(b) }
+	catch (e) { return a === b }   // malformed %xx — fall back to a raw compare
+}
+
 vb = document.getElementById('viewBox')
 vi = document.getElementById('viewImg')
 vi2 = document.getElementById('viewImg2')
@@ -96,14 +105,14 @@ function buildDom() {
 
 	buildDirectoryGrid(siblingUrls, viewerState.dirUrls)
 
-	let cur = decodeURIComponent(window.location.pathname)
-	let idx = siblingUrls.indexOf(cur)
+	let cur = window.location.pathname            // encoded form — for hrefs & '/' checks
+	let idx = siblingUrls.findIndex(u => samePath(u, cur))
 
 	const np = document.getElementById('navPrevious')
 	if (idx > 0) {
 		np.onclick = ()=>{navigateTo(siblingUrls[idx - 1]); return false}
 		np.href = siblingUrls[idx - 1]
-		np.innerText += ' ' + beautifyLabel(decodeURI(siblingUrls[idx - 1]))
+		np.innerText += ' ' + beautifyLabel(decodeURIComponent(siblingUrls[idx - 1]))
 	} else {
 		np.classList.add('nav-hidden')
 	}
@@ -112,7 +121,7 @@ function buildDom() {
 	if (cur !== '/') {
 		nu.onclick = ()=>{navigateTo(viewerState.dirUrls[0]); return false}
 		nu.href = viewerState.dirUrls[0]
-		nu.innerText += ' ' + beautifyLabel(decodeURI(viewerState.dirUrls[0]))
+		nu.innerText += ' ' + beautifyLabel(decodeURIComponent(viewerState.dirUrls[0]))
 	} else {
 		nu.classList.add('nav-hidden')
 	}
@@ -121,7 +130,7 @@ function buildDom() {
 	if (idx !== -1 && idx < siblingUrls.length - 1) {
 		nn.onclick = ()=>{navigateTo(siblingUrls[idx + 1]); return false}
 		nn.href = siblingUrls[idx + 1]
-		nn.innerText = beautifyLabel(decodeURI(siblingUrls[idx + 1])) + ' ' + nn.innerText
+		nn.innerText = beautifyLabel(decodeURIComponent(siblingUrls[idx + 1])) + ' ' + nn.innerText
 	} else {
 		nn.classList.add('nav-hidden')
 	}
@@ -162,7 +171,7 @@ function resumeSession() {
 	}
 
 	let location = getCookie('location=')
-	if (decodeURI(window.location.href) !== decodeURI(location)) {
+	if (!samePath(window.location.href, location)) {
 		fetch(location).then(r => {
 			if (r.ok) { window.location.href = location; return; }
 			updateCookie(window.location.origin + '/', 0)
@@ -530,10 +539,13 @@ function buildDirectoryGrid(siblings, children) {
 		let a       = document.createElement('a')
 		a.href      = url
 		a.onclick   = navigate // todo: ugh
-		a.innerText = decodeURI(url.split('/').at(-1) || url)
-		if (url === decodeURI(window.location.pathname)) {
+		a.innerText = decodeURIComponent(url.split('/').at(-1) || url)
+		if (samePath(url, window.location.pathname)) {
 			a.classList.add('active')
 		}
+		// index by URL so navigateTo()/highlightLastDir() can find this element
+		// (keys match: callers look up the same server-encoded url strings)
+		viewerState.dirElms[url] = a
 		return a
 	}
 
@@ -654,8 +666,7 @@ function bindEvents() {
 		// directory navigation
 		if      (e[navMod] && e.key == 'ArrowUp'   ) {
 			e.preventDefault()
-			const cur = window.location.pathname;
-			const idx = siblingUrls.indexOf(cur)
+			const idx = siblingUrls.findIndex(u => samePath(u, window.location.pathname))
 			if (idx > 0) navigateTo(siblingUrls[idx - 1])
 		}
 		else if (e[navMod] && e.key == 'ArrowLeft' ) {
@@ -668,8 +679,7 @@ function bindEvents() {
 		}
 		else if (e[navMod] && e.key == 'ArrowDown' ) {
 			e.preventDefault()
-			const cur = window.location.pathname;
-			const idx = siblingUrls.indexOf(cur)
+			const idx = siblingUrls.findIndex(u => samePath(u, window.location.pathname))
 			if (idx !== -1 && idx < siblingUrls.length - 1) navigateTo(siblingUrls[idx + 1])
 		}
 		// home/end

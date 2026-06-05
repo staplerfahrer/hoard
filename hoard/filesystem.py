@@ -135,7 +135,10 @@ def roots() -> list[tuple[str, str]]:
 
 
 def to_client_path(file_path: str) -> str:
-	safe = '/, &' # TODO: fix path highlighting and where exactly encoding is needed or not
+	# Percent-encode every reserved/unsafe char, keeping only '/' as the separator.
+	# The exact escapes needn't match the browser's encoder byte-for-byte: the client
+	# compares paths in DECODED form (decodeURIComponent), which is encoder-agnostic.
+	safe = '/'
 	abs_path = os.path.abspath(file_path)
 	for name, root_path in roots():
 		if abs_path == root_path:
@@ -147,11 +150,16 @@ def to_client_path(file_path: str) -> str:
 
 
 def to_server_path(url: str) -> str:
-	"""Translate a URL path to a filesystem path, or VIRTUAL_ROOT for '/'."""
+	"""Translate a URL path to a filesystem path, or VIRTUAL_ROOT for '/'.
+
+	The caller is expected to have percent-decoded the path already (handle_request
+	unquotes the whole request path once), so this does NOT decode again — decoding
+	twice would corrupt a name containing a literal '%'.
+	"""
 	if url == '/':
 		return VIRTUAL_ROOT
 	parts = url.lstrip('/').split('/', 1)
-	root_name = urlparse.unquote(parts[0])
+	root_name = parts[0]
 	rest      = parts[1] if len(parts) > 1 else ''
 	for name, root_path in roots():
 		if name == root_name:

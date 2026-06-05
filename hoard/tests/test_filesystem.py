@@ -1,4 +1,5 @@
 import os
+import urllib.parse
 
 import pytest
 
@@ -31,6 +32,23 @@ def test_client_path_round_trips(fake_root):
 
 def test_root_path_maps_back_to_named_url(fake_root):
 	assert fs.to_client_path(str(fake_root)) == '/Photos'
+
+
+def test_special_chars_are_encoded_and_round_trip(fake_root):
+	# reserved/unsafe chars that are legal in filenames but not in raw URLs
+	raw = os.path.join(str(fake_root), 'Tom & Jerry', 'a #1.jpg')
+	url = fs.to_client_path(raw)
+	# fully percent-encoded — none of these survive literally in the URL
+	assert not any(c in url for c in ' &#')
+	assert url.split('/')[1] == 'Photos'                 # '/' kept as separator
+	# the real pipeline: handle_request unquotes once, then maps to a server path
+	assert fs.to_server_path(urllib.parse.unquote(url)) == os.path.abspath(raw)
+
+
+def test_percent_in_name_is_not_double_decoded(fake_root):
+	raw = os.path.join(str(fake_root), '50%41 off')      # literal '%41', not 'A'
+	url = fs.to_client_path(raw)
+	assert fs.to_server_path(urllib.parse.unquote(url)) == os.path.abspath(raw)
 
 
 def test_path_outside_any_root_maps_to_slash(tmp_path):
