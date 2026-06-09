@@ -109,8 +109,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			else:
 				img = Image.open(reqObj)
 			img = ImageOps.exif_transpose(img) # type: ignore
-			if img.mode != 'RGB':
-				img = img.convert('RGB')
+			if img.mode != 'RGBA':
+				img = img.convert('RGBA')
 
 			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
 
@@ -133,10 +133,8 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
 		except Exception as e:
-			if isinstance(e, UnidentifiedImageError):
-				log(f'Couldn\'t render thumbnail for {serverPath}')
-			else:
-				log(f'Exception at "make a thumbnail": {traceback.format_exc()}')
+			log(f'{serverPath} exception at "make a thumbnail":\n'
+				f'{traceback.format_exc()}')
 			icon = Image.open(os.path.join('resources', 'Enso.png'))
 			icon.thumbnail(size=tnWidthHeight)
 
@@ -148,7 +146,7 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 			draw_label(draw, tnWidthHeight, font, tnColor, err_label, 'left') # type: ignore
 
 		buf = io.BytesIO()
-		canvas.save(buf, format='jpeg', quality=95, optimize=False, progressive=True, subsampling=1)
+		canvas.save(buf, format='jpeg', quality=98, optimize=False, progressive=False, subsampling=1)
 		log('returning jpeg')
 		result: tuple[bytes, str] = (buf.getvalue(), 'image/jpeg')
 

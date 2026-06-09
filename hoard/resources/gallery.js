@@ -591,26 +591,42 @@ function buildDirectoryGrid(siblings, children) {
 
 function isVisible(x) {
 	let loadExtra      = 100
+	// measure the grid cell, not the <img>: in recursive view the img is wrapped in
+	// a position:relative .tn-wrap, so img.offsetTop is ~0 relative to that wrapper
+	const cell         = cellOf(x)
 	// https://stackoverflow.com/questions/4096863/how-to-get-and-set-the-current-web-page-scroll-position
 	let visibleTop     = document.documentElement.scrollTop
 	let visibleBottom  = document.documentElement.clientHeight + visibleTop
-	let itemBottom     = x.offsetTop + x.height
-	let itemTop        = x.offsetTop
+	let itemTop        = cell.offsetTop
+	let itemBottom     = itemTop + cell.offsetHeight
 	let boundaryTop    = visibleTop - loadExtra
 	let boundaryBottom = visibleBottom + loadExtra
 	return (itemBottom > boundaryTop && itemTop < boundaryBottom)
 }
 
-function borderViewed() {
+function borderViewed(scroll = true) {
 	for (let i = 0; i < viewerState.imgElms.length; i++) {
 		const elmtAtIdx = viewerState.imgElms[i]
 		const elmtDataIdx = elmtAtIdx.getAttribute('data-index')
 		elmtAtIdx.classList.remove('selection-outline')
 		if (elmtDataIdx == viewerState.viewedIndex) {
 			elmtAtIdx.classList.add('selection-outline')
-			document.documentElement.scrollTop = Math.max(elmtAtIdx.offsetTop - 400, 0)
+			// scroll using the grid cell's page offset (see isVisible) so recursive
+			// view (wrapped thumbnails) scrolls to the active thumbnail correctly
+			if (scroll) document.documentElement.scrollTop = Math.max(cellOf(elmtAtIdx).offsetTop - 400, 0)
 		}
 	}
+}
+
+// long-press selection: mark a thumbnail as the current item (outline it, set the
+// index for keyboard nav / flagging) WITHOUT opening the viewer. No scroll — the
+// pressed thumbnail is already under the cursor.
+function selectThumb(index) {
+	if (index < 0 || index >= viewerState.imgUrls.length) return
+	viewerState.viewedIndex = index
+	borderViewed(false)
+	updateFlagButton()
+	updateCookie(window.location.href, viewerState.viewedIndex)
 }
 
 //#region MARK:flags
@@ -674,6 +690,38 @@ function bindEvents() {
 	}
 
 	document.getElementById('flagButton').onclick = cycleFlag
+
+	// press-and-hold a thumbnail to SELECT it (outline only); a quick click still
+	// opens it (img.onclick = toggleZoom). Delegated on the container so it scales.
+	const LONG_PRESS_MS = 400
+	let pressTimer = null
+	let pressStartX = 0, pressStartY = 0
+	let longPressed = false
+	const tc = document.getElementById('thumbnailContainer')
+
+	tc.addEventListener('mousedown', (e) => {
+		if (e.button !== 0) return                 // left button only
+		const img = e.target.closest('.tn')
+		if (!img) return
+		longPressed = false
+		pressStartX = e.clientX; pressStartY = e.clientY
+		const index = Number(img.getAttribute('data-index'))
+		clearTimeout(pressTimer)
+		pressTimer = setTimeout(() => { longPressed = true; selectThumb(index) }, LONG_PRESS_MS)
+	})
+	// cancel the pending long-press on release, on leaving the grid, or once the
+	// pointer moves far enough that this is a drag/scroll rather than a hold
+	tc.addEventListener('mouseup',    () => clearTimeout(pressTimer))
+	tc.addEventListener('mouseleave', () => clearTimeout(pressTimer))
+	tc.addEventListener('mousemove',  (e) => {
+		if (Math.abs(e.clientX - pressStartX) > 10 || Math.abs(e.clientY - pressStartY) > 10)
+			clearTimeout(pressTimer)
+	})
+	// a long press is followed by a click event — swallow it (capture phase, before
+	// the thumbnail's own onclick) so the hold selects instead of opening
+	tc.addEventListener('click', (e) => {
+		if (longPressed) { e.stopPropagation(); e.preventDefault(); longPressed = false }
+	}, true)
 
 	// prevent accidental dragging of clickable elements
 	vi.ondragstart  = (e) => e.preventDefault()

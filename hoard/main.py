@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 import webbrowser
 
 from pillow_heif import register_heif_opener # type: ignore
@@ -20,9 +21,6 @@ import stats
 # TODO: index all file names in the library on startup (walk the root dirs, store
 #       relative paths in a list/trie) and expose a search endpoint; add a search
 #       box to the gallery UI that queries it and navigates to matches.
-# DONE: per-file flags (pick / reject / none) — flags.py persists a per-directory
-#       notes.txt (YAML), handle_flag.py serves GET <file>?flag=<state>, and the
-#       viewer cycles state with the 'p' hotkey / bar button (see flags.py).
 # TODO: store other user-generated metadata (notes, ratings, etc.) alongside flags
 #       in the per-directory notes.txt; create/update it only when present.
 # TODO: manual zoom (scroll wheel / pinch) and drag-to-pan for the image viewer.
@@ -48,28 +46,14 @@ busy_thread_count: int                       = 0
 busy_thread_lock : threading.Lock            = threading.Lock()
 
 
-def _log_thread_exception(args: threading.ExceptHookArgs) -> None:
-	"""Send uncaught exceptions from any thread to the log file.
-
-	The default hook prints them to stderr, where the ui() repaint (cursor-up +
-	rewrite at 60fps) overwrites them — so they flash on the terminal and are lost.
-	Routing them to log.txt makes them readable after the fact.
-	"""
-	if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
-		return
-	tb = ''.join(traceback.format_exception(
-		args.exc_type, args.exc_value, args.exc_traceback))
-	name = args.thread.name if args.thread else '<unknown>'
-	log(f'Uncaught exception in thread {name}:\n{tb}')
-
-
 def main():
 	try:
 		threading.excepthook = _log_thread_exception
+		warnings.showwarning = _log_warning
 		os.system('cls' if WINDOWS else 'clear')
-		check_dependencies()
+		_check_dependencies()
 		if config('autoStart'):
-			webbrowser.open(server_urls()[0])
+			webbrowser.open(_server_urls()[0])
 
 		# UI thread
 		threading.Thread(
@@ -176,14 +160,14 @@ def thread_worker():
 def ui():
 	# hotkey daemon
 	threading.Thread(
-		target=hotkey_listener,
+		target=_hotkey_listener,
 		name='Hotkey Listener',
 		daemon=True).start()
 
 	sec_per_frame = 1 / 60
 	last_rq = 0
 	req_sec_avg = 0
-	urls = server_urls()
+	urls = _server_urls()
 	# when bound to all interfaces, list every reachable URL; the title shows the primary one
 	addresses_line = '' if len(urls) <= 1 else 'Reachable at  ' + '   '.join(urls) + '\n'
 	while True:
@@ -221,7 +205,7 @@ def ui():
 			sleep(1)  # don't spin a tight error loop hammering the log
 
 
-def hotkey_listener():
+def _hotkey_listener():
 	if WINDOWS:
 		import msvcrt
 		while True:
@@ -234,7 +218,7 @@ def hotkey_listener():
 					log('Restarting...')
 					os.execv(sys.executable, [sys.executable] + sys.argv)
 			except Exception:
-				log(f'hotkey_listener() exception {traceback.format_exc()}')
+				log(f'_hotkey_listener() exception {traceback.format_exc()}')
 	else:
 		if not sys.stdin.isatty():
 			return
@@ -252,23 +236,23 @@ def hotkey_listener():
 						log('Restarting...')
 						os.execv(sys.executable, [sys.executable] + sys.argv)
 		except Exception:
-			log(f'hotkey_listener() exception {traceback.format_exc()}')
+			log(f'_hotkey_listener() exception {traceback.format_exc()}')
 		finally:
 			termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)              # type: ignore
 
 
-def server_urls() -> list[str]:
+def _server_urls() -> list[str]:
 	"""Client-reachable http URLs for the configured bind address."""
 	address = config('address')
 	port    = config('port')
 	if address in ('0.0.0.0', '::', ''):
-		hosts = local_ip_addresses() or ['127.0.0.1']
+		hosts = _local_ip_addresses() or ['127.0.0.1']
 	else:
 		hosts = [address]
 	return [f'http://{h}:{port}' for h in hosts]
 
 
-def local_ip_addresses() -> list[str]:
+def _local_ip_addresses() -> list[str]:
 	"""Best-effort list of this machine's LAN IPv4 addresses (for 0.0.0.0 binds)."""
 	ips: list[str] = []
 	# primary outbound IP — the one LAN clients are most likely to reach us on.
@@ -290,7 +274,7 @@ def local_ip_addresses() -> list[str]:
 	return ips
 
 
-def check_dependencies():
+def _check_dependencies():
 	deps = {
 		'dcraw.exe': 'https://github.com/ncruces/dcraw/releases or https://www.dechifro.org/dcraw/',
 	}
@@ -305,6 +289,31 @@ def check_dependencies():
 	if show_message:
 		time.sleep(10)
 		os.system('cls' if WINDOWS else 'clear')
+
+
+def _log_thread_exception(args: threading.ExceptHookArgs) -> None:
+	"""Send uncaught exceptions from any thread to the log file.
+
+	The default hook prints them to stderr, where the ui() repaint (cursor-up +
+	rewrite at 60fps) overwrites them — so they flash on the terminal and are lost.
+	Routing them to log.txt makes them readable after the fact.
+	"""
+	if issubclass(args.exc_type, (KeyboardInterrupt, SystemExit)):
+		return
+	tb = ''.join(traceback.format_exception(
+		args.exc_type, args.exc_value, args.exc_traceback))
+	name = args.thread.name if args.thread else '<unknown>'
+	log(f'Uncaught exception in thread {name}:\n{tb}')
+
+
+def _log_warning(message, category, filename, lineno, file=None, line=None) -> None:
+	"""Route Python warnings (e.g. from Pillow) to the log file, not stderr.
+
+	Warnings aren't exceptions, so the per-request try/except never sees them and
+	the default handler prints them straight to the terminal. This applies process-
+	wide (all threads) once installed.
+	"""
+	log(f'{category.__name__}: {message} ({os.path.basename(filename)}:{lineno})')
 
 
 if __name__ == '__main__':
