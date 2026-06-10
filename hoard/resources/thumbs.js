@@ -95,12 +95,10 @@ const thumbs = (function(){
 				e.target._loaded = true
 			}
 			img.onerror = (e) => {
-				console.log(e)
 				img.classList.remove('tn-loading')
 				img._loaded = true
 			}
 		} catch (e) {
-			console.log(e)
 			img.classList.remove('tn-loading')
 			img._loaded = true
 		}
@@ -130,8 +128,8 @@ const thumbs = (function(){
 		const fps = 60
 
 		if (window.busyScrolling)
-			// schedule next
-			return window.setTimeout(loadThumbsRandomly, fps)
+			// schedule next (same frame interval as below — fps is frames/sec)
+			return window.setTimeout(loadThumbsRandomly, 1000 / fps)
 
 		let next = viewerState.lowestPending + Math.floor(
 			(Math.random() ** 1.6) * (viewerState.imgElms.length - viewerState.lowestPending + 1))

@@ -556,7 +556,6 @@ function highlightLastDir() {
 }
 
 function buildDirectoryGrid(siblings, children) {
-	let top = 0
 	let makeLink = url => {
 		let a       = document.createElement('a')
 		a.href      = url
@@ -732,7 +731,6 @@ function bindEvents() {
 	})
 
 	document.onkeydown = (e) => {
-		console.log(e)
 		// directory navigation
 		if      (e[navMod] && e.key == 'ArrowUp'   ) {
 			e.preventDefault()

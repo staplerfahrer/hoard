@@ -2,6 +2,9 @@ __pycache__/
 _deploy/
 hoard/config.json
 hoard/log.txt
+hoard/log.txt.*
 hoard/resources/dcraw.exe
 hoard/resources/libjpeg-62.dll
 hoard/venv/
+hoard/typings/
+*.bak

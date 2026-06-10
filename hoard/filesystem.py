@@ -149,6 +149,23 @@ def to_client_path(file_path: str) -> str:
 	return '/'
 
 
+def within_roots(server_path: str) -> bool:
+	"""True if server_path stays inside a configured root (blocks ../ traversal).
+
+	Accepts a real filesystem path, optionally carrying a query suffix (?tn / ?del /
+	?explorer / ?flag=...); the suffix is stripped before the check. VIRTUAL_ROOT is
+	always allowed. os.path.abspath normalises '..' so an escaping path fails the test.
+	"""
+	if server_path == VIRTUAL_ROOT:
+		return True
+	real     = server_path.split('?', 1)[0]
+	abs_path = os.path.abspath(real)
+	return any(
+		abs_path == root_path or abs_path.startswith(root_path + os.sep)
+		for _, root_path in roots()
+	)
+
+
 def to_server_path(url: str) -> str:
 	"""Translate a URL path to a filesystem path, or VIRTUAL_ROOT for '/'.
 

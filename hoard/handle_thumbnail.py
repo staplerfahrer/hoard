@@ -18,13 +18,24 @@ SHARPEN = 1.3
 _lock                = threading.Lock()
 _active_count: int   = 0
 _last_slow_at: float = 0.0
-_MAX_CONCURRENT      = 30
+_MAX_CONCURRENT      = 30  # mirrors main.THREAD_COUNT (not imported — would be circular)
 _SLOW_MAX_CONCURRENT = 10
 _SLOW_THRESHOLD      = 10.0
 _SLOW_COOLDOWN       = 10.0
 
+_error_icon: Image.Image | None = None
 
-def run(serverPath: str) -> tuple[bytes, str] | None:
+
+def _error_icon_copy() -> Image.Image:
+	"""The 'cannot render' icon, loaded from disk once and cached. Returns a fresh
+	RGBA copy each call so the caller can thumbnail/mutate it freely."""
+	global _error_icon
+	if _error_icon is None:
+		_error_icon = Image.open(os.path.join('resources', 'Enso.png')).convert('RGBA')
+	return _error_icon.copy()
+
+
+def run(server_path: str) -> tuple[bytes, str] | None:
 	global _active_count, _last_slow_at
 
 	with _lock:
@@ -37,64 +48,61 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 
 	t0 = time.perf_counter()
 	try:
-		log(f'handle_thumbnail {serverPath}')
-		tnWidthHeight  = config('thumbnailWidthHeight')
-		tnColor        = ImageColor.getrgb(config('thumbBackgroundColor'))
-		reqObj         = serverPath[:-3]
-		file_name      = os.path.split(reqObj)[-1:][0]
+		log(f'handle_thumbnail {server_path}')
+		tn_size   = config('thumbnailWidthHeight')
+		tn_color  = ImageColor.getrgb(config('thumbBackgroundColor'))
+		req_obj   = server_path[:-3]
+		file_name = os.path.basename(req_obj)
+		ext       = os.path.splitext(req_obj)[1].lower()
 
-		reqObjBytes: io.BytesIO | None  = None
-		reqObjImage: Image.Image | None = None
+		req_obj_bytes: io.BytesIO | None  = None
+		req_obj_image: Image.Image | None = None
 
 		# render plugins take precedence; their preview rides the pipeline below
-		plugin = plugins.plugin_for(reqObj)
+		plugin = plugins.plugin_for(req_obj)
 		if plugin is not None:
 			try:
-				reqObjBytes = io.BytesIO(plugin.render_thumbnail(reqObj, tnWidthHeight))
+				req_obj_bytes = io.BytesIO(plugin.render_thumbnail(req_obj, tn_size))
 			except Exception:
-				log(f'plugin thumbnail failed for {reqObj}: {traceback.format_exc()}')
+				log(f'plugin thumbnail failed for {req_obj}: {traceback.format_exc()}')
 
 		# if video, extract a frame via PyAV (in-process, no subprocess)
-		try:
-			if reqObjBytes is not None or not (reqObj.endswith('.mp4') or reqObj.endswith('.m4v') or reqObj.endswith('.mov') or reqObj.endswith('.ts')):
-				raise Exception('not a video')
-			timeStamps = config('videoThumbnailTimeStamps')
-			with av.open(reqObj) as container:
-				stream = container.streams.video[0]
-				stream.codec_context.skip_frame = 'NONKEY'
-				for ts in timeStamps:
-					h, m, s = ts.split(':')
-					seek_us = int((int(h) * 3600 + int(m) * 60 + float(s)) * 1_000_000)
-					try:
-						container.seek(seek_us)
-						for frame in container.decode(stream):
-							reqObjImage = frame.to_image() # type: ignore
+		if req_obj_bytes is None and ext in fs.VIDEO_EXTS:
+			try:
+				time_stamps = config('videoThumbnailTimeStamps')
+				with av.open(req_obj) as container:
+					stream = container.streams.video[0]
+					stream.codec_context.skip_frame = 'NONKEY'
+					for ts in time_stamps:
+						h, m, s = ts.split(':')
+						seek_us = int((int(h) * 3600 + int(m) * 60 + float(s)) * 1_000_000)
+						try:
+							container.seek(seek_us)
+							for frame in container.decode(stream):
+								req_obj_image = frame.to_image() # type: ignore
+								break
+						except Exception:
+							continue
+						if req_obj_image:
 							break
-					except Exception:
-						continue
-					if reqObjImage:
-						break
-		except Exception as e:
-			if 'not a video' not in e.args:
+			except Exception:
 				log(f'Exception at "video thumbnail": {traceback.format_exc()}')
 
 		# for RAW files, extract the embedded JPEG via dcraw before PIL opens it
-		if not reqObjImage and reqObjBytes is None:
-			raw_ext = os.path.splitext(reqObj)[1].lower()
-			if raw_ext in fs.RAW_EXTS:
-				raw_bytes = fs.dcraw_extract(reqObj)
-				if raw_bytes:
-					reqObjBytes = io.BytesIO(raw_bytes)
+		if not req_obj_image and req_obj_bytes is None and ext in fs.RAW_EXTS:
+			raw_bytes = fs.dcraw_extract(req_obj)
+			if raw_bytes:
+				req_obj_bytes = io.BytesIO(raw_bytes)
 
 		# for PDF files, render page 0 via PyMuPDF
 		pdf_page_count: int | None = None
-		if not reqObjImage and reqObjBytes is None and reqObj.lower().endswith('.pdf'):
+		if not req_obj_image and req_obj_bytes is None and ext == '.pdf':
 			try:
 				import fitz  # PyMuPDF
-				doc = fitz.open(reqObj)
+				doc = fitz.open(req_obj)
 				pdf_page_count = len(doc)
 				pix = doc[0].get_pixmap(matrix=fitz.Matrix(2.0, 2.0), colorspace=fitz.csRGB) # type: ignore
-				reqObjImage = Image.frombytes('RGB', (pix.width, pix.height), pix.samples) # type: ignore
+				req_obj_image = Image.frombytes('RGB', (pix.width, pix.height), pix.samples) # type: ignore
 				doc.close()
 			except Exception:
 				log(f'Exception at "pdf thumbnail": {traceback.format_exc()}')
@@ -102,12 +110,12 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 		# make a thumbnail
 		font = ImageFont.load_default(size=12)
 		try:
-			if reqObjImage:
-				img = reqObjImage # type: ignore
-			elif reqObjBytes:
-				img = Image.open(reqObjBytes)
+			if req_obj_image:
+				img = req_obj_image # type: ignore
+			elif req_obj_bytes:
+				img = Image.open(req_obj_bytes)
 			else:
-				img = Image.open(reqObj)
+				img = Image.open(req_obj)
 			img = ImageOps.exif_transpose(img) # type: ignore
 			if img.mode != 'RGBA':
 				img = img.convert('RGBA')
@@ -116,34 +124,34 @@ def run(serverPath: str) -> tuple[bytes, str] | None:
 
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
-			img.thumbnail(size=tnWidthHeight, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
+			img.thumbnail(size=tn_size, resample=Image.Resampling.LANCZOS, reducing_gap=1.0)
 			img = img.filter(ImageFilter.UnsharpMask(radius=6, percent=20))
 
-			canvas = Image.new('RGB', tnWidthHeight, tnColor)
+			canvas = Image.new('RGB', tn_size, tn_color)
 			paste_centered(canvas, img)
 
 			draw       = ImageDraw.Draw(canvas, 'RGBA')
 			# truncate the filename so its label can't run into the right-hand label
 			right_w    = draw.textlength(text_right, font=font)
-			max_left   = tnWidthHeight[0] - right_w - 2 * TEXT_MARGIN - LABEL_GAP
+			max_left   = tn_size[0] - right_w - 2 * TEXT_MARGIN - LABEL_GAP
 			file_label = ellipsize(draw, file_name, font, max_left)
-			draw_label(draw, tnWidthHeight, font, tnColor, file_label, 'left') # type: ignore
-			draw_label(draw, tnWidthHeight, font, tnColor, text_right, 'right') # type: ignore
+			draw_label(draw, tn_size, font, tn_color, file_label, 'left') # type: ignore
+			draw_label(draw, tn_size, font, tn_color, text_right, 'right') # type: ignore
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
 		except Exception as e:
-			log(f'{serverPath} exception at "make a thumbnail":\n'
+			log(f'{server_path} exception at "make a thumbnail":\n'
 				f'{traceback.format_exc()}')
-			icon = Image.open(os.path.join('resources', 'Enso.png'))
-			icon.thumbnail(size=tnWidthHeight)
+			icon = _error_icon_copy()
+			icon.thumbnail(size=tn_size)
 
-			canvas = Image.new('RGB', tnWidthHeight, tnColor)
-			paste_centered(canvas, icon, icon if icon.mode == 'RGBA' else None)
+			canvas = Image.new('RGB', tn_size, tn_color)
+			paste_centered(canvas, icon, icon)
 
 			draw = ImageDraw.Draw(canvas, 'RGBA')
-			err_label = ellipsize(draw, f'{file_name} cannot be rendered.', font, tnWidthHeight[0] - 2 * TEXT_MARGIN - LABEL_GAP)
-			draw_label(draw, tnWidthHeight, font, tnColor, err_label, 'left') # type: ignore
+			err_label = ellipsize(draw, f'{file_name} cannot be rendered.', font, tn_size[0] - 2 * TEXT_MARGIN - LABEL_GAP)
+			draw_label(draw, tn_size, font, tn_color, err_label, 'left') # type: ignore
 
 		buf = io.BytesIO()
 		canvas.save(buf, format='jpeg', quality=98, optimize=False, progressive=False, subsampling=1)
@@ -182,14 +190,14 @@ def paste_centered(canvas: Image.Image, img: Image.Image, mask: Image.Image | No
 	y = (canvas.size[1] - img.size[1]) // 2
 	canvas.paste(img, (x, y), mask)
 
-def draw_label(draw: ImageDraw.ImageDraw, canvasSize: tuple[int, int],
+def draw_label(draw: ImageDraw.ImageDraw, canvas_size: tuple[int, int],
 			   font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-			   bgColor: tuple[int, int, int], text: str, align: str):
-	w, h = canvasSize
+			   bg_color: tuple[int, int, int], text: str, align: str):
+	w, h = canvas_size
 	bb   = draw.textbbox((0, 0), text, font=font)
 	tw   = bb[2] - bb[0]
 	y    = h - 18
-	box  = bgColor + (90,)
+	box  = bg_color + (90,)
 	if align == 'right':
 		x = w - tw - TEXT_MARGIN
 		draw.rectangle((w - tw - TEXT_MARGIN - 2, y - 1, w, h), fill=box)

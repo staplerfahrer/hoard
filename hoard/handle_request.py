@@ -33,6 +33,11 @@ def build_response_bytes(req: str) -> bytes:
 	elif req_server_path == fs.VIRTUAL_ROOT or os.path.isdir(req_server_path):
 		data, mime = handle_directory.run(req_server_path)
 
+	# everything below operates on a real file path — reject ../ traversal outside roots
+	elif not fs.within_roots(req_server_path):
+		log(f'404 (outside roots) {req_server_path}')
+		return b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 9\r\n\r\nNot Found'
+
 	elif req_server_path.endswith('?tn'): # remove ?tn
 		result = handle_thumbnail.run(req_server_path)
 		if result is None:
@@ -62,7 +67,8 @@ def _open_explorer(serverPath: str) -> tuple[bytes, str]:
 	target = serverPath[:-9]  # strip '?explorer'
 	log('exploring: ' + target)
 	if WINDOWS:
-		subprocess.Popen(f'explorer /select,"{target}"', shell=True)
+		# no shell=True: pass args directly so a crafted path can't inject a command
+		subprocess.Popen(['explorer', f'/select,{target}'])
 	elif MACOS:
 		subprocess.Popen(['open', '-R', target])
 	else:
@@ -80,7 +86,9 @@ def _decode_request(req: str) -> tuple[str, int | None, int | None]:
 	if not http_get.endswith(' HTTP/1.1'):
 		raise Exception('request not HTTP/1.1')
 
-	requested_path = unquote(http_get[4:-9], encoding='utf-8', errors='strict')
+	# errors='replace' so a stray non-UTF-8 %xx degrades to U+FFFD instead of raising
+	# (which would drop the connection with no response); such a path just won't resolve
+	requested_path = unquote(http_get[4:-9], encoding='utf-8', errors='replace')
 
 	http_range = [l for l in request_lines if 'range:' in str.lower(l)]
 	if not http_range:

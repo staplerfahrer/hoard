@@ -46,11 +46,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 	else:
 		# ── security: stay within configured roots ───────────────────────────
 		req_obj = os.path.abspath(server_path)
-		in_any_root = any(
-			req_obj == rp or req_obj.startswith(rp + os.sep)
-			for rp in all_root_paths
-		)
-		if not in_any_root:
+		if not fs.within_roots(server_path):
 			return run(fs.VIRTUAL_ROOT)
 		tick('abspath/security')
 

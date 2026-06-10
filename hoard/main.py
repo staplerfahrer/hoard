@@ -50,6 +50,7 @@ def main():
 	try:
 		threading.excepthook = _log_thread_exception
 		warnings.showwarning = _log_warning
+		_validate_config()
 		os.system('cls' if WINDOWS else 'clear')
 		_check_dependencies()
 		if config('autoStart'):
@@ -152,7 +153,7 @@ def thread_worker():
 
 			with busy_thread_lock:
 				busy_thread_count -= 1
-		except:
+		except Exception:
 			log(f'thread_worker() exception {traceback.format_exc()}')
 
 
@@ -272,6 +273,28 @@ def _local_ip_addresses() -> list[str]:
 	except Exception:
 		pass
 	return ips
+
+
+def _validate_config():
+	"""Fail fast with a clear message if config.json is missing or malformed,
+	instead of surfacing cryptic errors mid-request later."""
+	required = ['address', 'port', 'roots', 'thumbnailPorts', 'thumbnailWidthHeight',
+				'thumbBackgroundColor', 'cacheSeconds', 'streamingChunkBytes']
+	for key in required:
+		try:
+			config(key)
+		except Exception:
+			raise SystemExit(f'config.json: missing required key "{key}". '
+							 'Copy config.json.example to config.json and edit it.')
+
+	roots = config('roots')
+	if not isinstance(roots, list) or not roots:
+		raise SystemExit('config.json: "roots" must be a non-empty list of {name, path}.')
+	for r in roots:
+		if not isinstance(r, dict) or 'name' not in r or 'path' not in r:
+			raise SystemExit('config.json: each entry in "roots" needs a "name" and a "path".')
+		if not os.path.isdir(r['path']):
+			print(f'Warning: root "{r.get("name")}" path does not exist: {r["path"]}')
 
 
 def _check_dependencies():

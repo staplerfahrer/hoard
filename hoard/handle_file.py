@@ -54,13 +54,16 @@ def run(server_path: str, range_l: int | None, range_u: int | None) \
 
 	# serve file with PIL mime
 	data, mime, range_l, range_u, end = fs.serve_file(server_path, range_l, range_u)
-	mime = _pil_mime(server_path, mime)
+	if range_l is None:  # full file in hand — refine the mime from the actual bytes
+		mime = _pil_mime(data, mime)
 	return data, mime, range_l, range_u, end
 
 
-def _pil_mime(server_path: str, fallback: str) -> str:
+def _pil_mime(data: bytes, fallback: str) -> str:
+	"""Correct the mime from the image's real format (e.g. a .jpg that's actually a
+	PNG). Reads only the header from the bytes already in memory — no extra disk read."""
 	try:
-		with Image.open(server_path) as img:
+		with Image.open(io.BytesIO(data)) as img:
 			return _PIL_MIME.get(img.format or '', fallback)
 	except Exception:
 		log(f'handle_file PIL: {traceback.format_exc()}')

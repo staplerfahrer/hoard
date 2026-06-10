@@ -57,6 +57,35 @@ def test_path_outside_any_root_maps_to_slash(tmp_path):
 	assert fs.to_client_path(str(outside)) == '/'
 
 
+# ── root containment (path-traversal guard) ──────────────────────────────────
+
+def test_within_roots_allows_files_inside(fake_root):
+	assert fs.within_roots(os.path.join(str(fake_root), 'a.jpg'))
+	assert fs.within_roots(os.path.join(str(fake_root), 'sub', 'deep.jpg'))
+
+
+def test_within_roots_allows_virtual_root():
+	assert fs.within_roots(fs.VIRTUAL_ROOT)
+
+
+def test_within_roots_ignores_query_suffix(fake_root):
+	# the real-path check must strip ?tn / ?del / ?flag=... before testing
+	inside = os.path.join(str(fake_root), 'a.jpg')
+	assert fs.within_roots(inside + '?tn')
+	assert fs.within_roots(inside + '?flag=pick')
+
+
+def test_within_roots_rejects_dotdot_escape(fake_root):
+	escape = os.path.join(str(fake_root), '..', '..', 'secret.txt')
+	assert not fs.within_roots(escape)
+	assert not fs.within_roots(escape + '?del')
+
+
+def test_within_roots_rejects_sibling_dir(tmp_path):
+	# configured root is tmp_path; a sibling path is under no root
+	assert not fs.within_roots(str(tmp_path.parent / 'outside' / 'x.jpg'))
+
+
 # ── viewer KIND classification ───────────────────────────────────────────────
 
 @pytest.mark.parametrize('name, kind', [
