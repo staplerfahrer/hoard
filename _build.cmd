@@ -41,6 +41,12 @@ copy %src%\thumbnail-placeholder.png %dst%
 copy %src%\thumbs.js                 %dst%
 copy %src%\viewer-mask.png           %dst%
 
+set /p extdeps=Include external dependencies such as dcraw? (y/n):
+set src=%src%\external_dependencies
+if "%extdeps%"=="y" (
+    copy %src%\*.* %dst%
+)
+
 :: render plugins (drop-in .py files)
 md _deploy\hoard\plugins
 copy hoard\plugins\*.py              _deploy\hoard\plugins

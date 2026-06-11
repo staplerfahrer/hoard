@@ -121,11 +121,11 @@ const thumbs = (function(){
 			viewerState.lowestPending++
 
 		// schedule next
-		window.setTimeout(loadVisibleThumbs, 1000/fps)
+		window.setTimeout(loadVisibleThumbs, 1000 / fps)
 	}
 
 	function loadThumbsRandomly() {
-		const fps = 60
+		const fps = 10
 
 		if (window.busyScrolling)
 			// schedule next (same frame interval as below — fps is frames/sec)
@@ -144,7 +144,7 @@ const thumbs = (function(){
 			load(next)
 
 		// schedule next
-		window.setTimeout(loadThumbsRandomly, 1000/fps)
+		window.setTimeout(loadThumbsRandomly, 1000 / fps)
 	}
 
 	return {

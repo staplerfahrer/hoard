@@ -111,7 +111,7 @@ function buildDom() {
 	const np = document.getElementById('navPrevious')
 	if (idx > 0) {
 		np.onclick = ()=>{navigateTo(siblingUrls[idx - 1]); return false}
-		np.href = siblingUrls[idx - 1]
+		np.href = navTarget(siblingUrls[idx - 1])
 		np.innerText += ' ' + beautifyLabel(decodeURIComponent(siblingUrls[idx - 1]))
 	} else {
 		np.classList.add('nav-hidden')
@@ -120,7 +120,7 @@ function buildDom() {
 	const nu = document.getElementById('navUp')
 	if (cur !== '/') {
 		nu.onclick = ()=>{navigateTo(viewerState.dirUrls[0]); return false}
-		nu.href = viewerState.dirUrls[0]
+		nu.href = navTarget(viewerState.dirUrls[0])
 		nu.innerText += ' ' + beautifyLabel(decodeURIComponent(viewerState.dirUrls[0]))
 	} else {
 		nu.classList.add('nav-hidden')
@@ -129,7 +129,7 @@ function buildDom() {
 	const nn = document.getElementById('navNext')
 	if (idx !== -1 && idx < siblingUrls.length - 1) {
 		nn.onclick = ()=>{navigateTo(siblingUrls[idx + 1]); return false}
-		nn.href = siblingUrls[idx + 1]
+		nn.href = navTarget(siblingUrls[idx + 1])
 		nn.innerText = beautifyLabel(decodeURIComponent(siblingUrls[idx + 1])) + ' ' + nn.innerText
 	} else {
 		nn.classList.add('nav-hidden')
@@ -516,15 +516,28 @@ function currentlyScrolling() {
 	return scrolling
 }
 
-function navigateTo(relUrl) {
+// The absolute URL that navigateTo(relUrl) goes to. Also used for the nav buttons'
+// and folder tiles' href, so middle-click / open-in-new-tab matches a normal click:
+// it resolves '..' the same way (not via the browser's relative-URL rules) and carries
+// the recursive ?all view (the virtual root '/' never gets ?all).
+function navTarget(relUrl) {
 	let absUrl
+	let toVirtualRoot = false
 	if (relUrl === '..') {
 		let segs = window.location.pathname.split('/').filter(Boolean)
 		segs.pop()
+		toVirtualRoot = segs.length === 0
 		absUrl = window.location.origin + (segs.length ? '/' + segs.join('/') : '/')
 	} else {
 		absUrl = window.location.origin + relUrl
 	}
+	if (viewerState.recursive && !toVirtualRoot)
+		absUrl += '?all'
+	return absUrl
+}
+
+function navigateTo(relUrl) {
+	const absUrl = navTarget(relUrl)
 
 	// highlight now so bfcache preserves it when hitting back
 	let elm = viewerState.dirElms[relUrl]
@@ -537,9 +550,6 @@ function navigateTo(relUrl) {
 	window.location.href = absUrl
 }
 
-function navigate(e) {
-	navigateTo(e.target.getAttribute('href'))
-}
 //#endregion
 
 function highlightLastDir() {
@@ -558,8 +568,9 @@ function highlightLastDir() {
 function buildDirectoryGrid(siblings, children) {
 	let makeLink = url => {
 		let a       = document.createElement('a')
-		a.href      = url
-		a.onclick   = navigate // todo: ugh
+		a.href      = navTarget(url)
+		// navigate via the relUrl (not the href, which is now an absolute navTarget URL)
+		a.onclick   = () => { navigateTo(url); return false }
 		a.innerText = decodeURIComponent(url.split('/').at(-1) || url)
 		if (samePath(url, window.location.pathname)) {
 			a.classList.add('active')
@@ -610,11 +621,31 @@ function borderViewed(scroll = true) {
 		elmtAtIdx.classList.remove('selection-outline')
 		if (elmtDataIdx == viewerState.viewedIndex) {
 			elmtAtIdx.classList.add('selection-outline')
-			// scroll using the grid cell's page offset (see isVisible) so recursive
-			// view (wrapped thumbnails) scrolls to the active thumbnail correctly
-			if (scroll) document.documentElement.scrollTop = Math.max(cellOf(elmtAtIdx).offsetTop - 400, 0)
+			if (scroll) scrollCellIntoView(cellOf(elmtAtIdx))
 		}
 	}
+}
+
+// Scroll the page only as much as needed to fully reveal `cell`; if it's already
+// within the visible range, don't scroll at all. The fixed #topBar overlaps the top
+// of the page, so treat the area under it as not-visible. Measures the grid cell
+// (cellOf) so the recursive ?all view (wrapped thumbnails) works too.
+function scrollCellIntoView(cell) {
+	const pad      = 20   // breathing room added only when we actually scroll
+	const topBar   = document.getElementById('topBar')
+	const topInset = topBar ? topBar.offsetHeight : 0
+	const cellTop    = cell.offsetTop
+	const cellBottom = cellTop + cell.offsetHeight
+	const viewTop    = document.documentElement.scrollTop
+	const viewHeight = document.documentElement.clientHeight
+	if (cellTop < viewTop + topInset) {
+		// (partly) above the visible area or hidden under the bar — reveal from the top
+		document.documentElement.scrollTop = Math.max(cellTop - topInset - pad, 0)
+	} else if (cellBottom > viewTop + viewHeight) {
+		// (partly) below the visible area — reveal from the bottom
+		document.documentElement.scrollTop = cellBottom - viewHeight + pad
+	}
+	// otherwise fully visible → leave the scroll position alone
 }
 
 // long-press selection: mark a thumbnail as the current item (outline it, set the
@@ -696,6 +727,7 @@ function bindEvents() {
 	let pressTimer = null
 	let pressStartX = 0, pressStartY = 0
 	let longPressed = false
+	let hoveredIndex = -1   // thumbnail under the cursor, for per-file hotkeys like 'e'
 	const tc = document.getElementById('thumbnailContainer')
 
 	tc.addEventListener('mousedown', (e) => {
@@ -711,10 +743,15 @@ function bindEvents() {
 	// cancel the pending long-press on release, on leaving the grid, or once the
 	// pointer moves far enough that this is a drag/scroll rather than a hold
 	tc.addEventListener('mouseup',    () => clearTimeout(pressTimer))
-	tc.addEventListener('mouseleave', () => clearTimeout(pressTimer))
+	tc.addEventListener('mouseleave', () => { clearTimeout(pressTimer); hoveredIndex = -1 })
 	tc.addEventListener('mousemove',  (e) => {
 		if (Math.abs(e.clientX - pressStartX) > 10 || Math.abs(e.clientY - pressStartY) > 10)
 			clearTimeout(pressTimer)
+	})
+	// track which thumbnail the cursor is over (mouseover bubbles; mouseenter doesn't)
+	tc.addEventListener('mouseover', (e) => {
+		const img = e.target.closest('.tn')
+		hoveredIndex = img ? Number(img.getAttribute('data-index')) : -1
 	})
 	// a long press is followed by a click event — swallow it (capture phase, before
 	// the thumbnail's own onclick) so the hold selects instead of opening
@@ -838,9 +875,12 @@ function bindEvents() {
 				})
 			}
 		}
-		// explorer
+		// explorer — reveal the thumbnail under the cursor in gallery mode, else the
+		// viewed file. Matters in the recursive ?all view, where files that share the
+		// listing live in different folders, so viewedIndex alone reveals the wrong one.
 		else if (e.key == 'e') {
-			fetch(viewerState.imgUrls[viewerState.viewedIndex] + '?explorer')
+			const i = (!window.zoomed && hoveredIndex >= 0) ? hoveredIndex : viewerState.viewedIndex
+			fetch(viewerState.imgUrls[i] + '?explorer')
 		}
 		// flag: cycle none → pick → reject → none
 		else if (e.key == 'p') {

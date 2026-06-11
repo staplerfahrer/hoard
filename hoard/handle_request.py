@@ -64,15 +64,18 @@ def build_response_bytes(req: str) -> bytes:
 
 
 def _open_explorer(serverPath: str) -> tuple[bytes, str]:
+	# args are formed into a string so that .Popen() doesn't remove necessary quotes for explorer.exe
 	target = serverPath[:-9]  # strip '?explorer'
 	log('exploring: ' + target)
 	if WINDOWS:
 		# no shell=True: pass args directly so a crafted path can't inject a command
-		subprocess.Popen(['explorer', f'/select,{target}'])
+		args = f'explorer /select,"{target}"'
 	elif MACOS:
-		subprocess.Popen(['open', '-R', target])
+		args = f'open -R "{target}'
 	else:
-		subprocess.Popen(['xdg-open', os.path.dirname(target)])
+		args = f'xdg-open "{os.path.dirname(target)}"'
+	log(str(args))
+	subprocess.Popen(args)
 	return b'ok', 'text/plain'
 
 
