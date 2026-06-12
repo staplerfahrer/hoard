@@ -9,23 +9,23 @@ md %dst%
 copy LICENSE   %dst%
 copy README.md %dst%
 
-copy %src%\config.json.example       %dst%
-copy %src%\config.py                 %dst%
-copy %src%\filesystem.py             %dst%
-copy %src%\flags.py                  %dst%
-copy %src%\gallery.html              %dst%
-copy %src%\handle_directory.py       %dst%
-copy %src%\handle_file.py            %dst%
-copy %src%\handle_flag.py            %dst%
-copy %src%\handle_request.py         %dst%
-copy %src%\handle_thumbnail.py       %dst%
-copy %src%\log.py                    %dst%
-copy %src%\main.py                   %dst%
-copy %src%\plugins.py                %dst%
-copy %src%\resources.py              %dst%
-copy %src%\requirements.txt          %dst%
-copy %src%\stats.py                  %dst%
-copy %src%\start.bat                 %dst%
+copy %src%\config.json.example %dst%
+copy %src%\config.py           %dst%
+copy %src%\filesystem.py       %dst%
+copy %src%\flags.py            %dst%
+copy %src%\gallery.html        %dst%
+copy %src%\handle_directory.py %dst%
+copy %src%\handle_file.py      %dst%
+copy %src%\handle_flag.py      %dst%
+copy %src%\handle_request.py   %dst%
+copy %src%\handle_thumbnail.py %dst%
+copy %src%\log.py              %dst%
+copy %src%\main.py             %dst%
+copy %src%\plugins.py          %dst%
+copy %src%\resources.py        %dst%
+copy %src%\requirements.txt    %dst%
+copy %src%\stats.py            %dst%
+copy %src%\start.bat           %dst%
 
 set src=%src%\resources
 set dst=%dst%\resources
@@ -48,8 +48,10 @@ if "%extdeps%"=="y" (
 )
 
 :: render plugins (drop-in .py files)
+set dst=_deploy\hoard\plugins
 md _deploy\hoard\plugins
-copy hoard\plugins\*.py              _deploy\hoard\plugins
+copy hoard\plugins\*.py %dst%
+copy hoard\plugins\*.md %dst%
 
 set dst=_deploy
 explorer %dst%
