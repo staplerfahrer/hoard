@@ -159,7 +159,6 @@ const thumbs = (function(){
 			const src = img._src
 			img.removeAttribute('src')
 			img.src = src
-			if (!img.src) console.log(i, img.src)
 		}
 		window.setTimeout(retryFailedThumbs, RETRY_MS)
 	}
