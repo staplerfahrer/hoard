@@ -1,6 +1,7 @@
 """Handle file mark changes:
     GET <file>?flag=<pick|reject|none>   pick/reject/none flag
     GET <file>?fav=<on|off>              favorite toggle (independent of the flag)
+    GET <file>?rotate=<0|90|180|270>     viewer rotation in degrees (independent)
 
 Stateless like the other handlers; persistence lives in flags.py.
 """
@@ -29,4 +30,16 @@ def run_favorite(server_path: str) -> tuple[bytes, str]:
 		return b'ok', 'text/plain'
 	except Exception:
 		log(f'favorite failed: {traceback.format_exc()}')
+		return b'error', 'text/plain'
+
+
+def run_rotation(server_path: str) -> tuple[bytes, str]:
+	path, _, val = server_path.partition('?rotate=')
+	try:
+		flags.set_rotation(path, int(val))
+		return b'ok', 'text/plain'
+	except ValueError:
+		return b'bad rotation', 'text/plain'
+	except Exception:
+		log(f'rotation failed: {traceback.format_exc()}')
 		return b'error', 'text/plain'

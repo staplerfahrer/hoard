@@ -19,6 +19,7 @@ const viewerState = {
 	kinds                : boot.data.kinds, // one char per imgUrl: KIND_* code
 	flags                : boot.data.flags, // one char per imgUrl: FLAG_* code
 	favorites            : boot.data.favorites, // one char per imgUrl: '1' favorite / '0' not
+	rotations            : boot.data.rotations, // one char per imgUrl: '0'..'3' quarter-turns
 	recursive            : boot.data.recursive, // show-all-subfolders view
 	dirUrls              : boot.data.dirUrls,
 	imgElms              : [],
@@ -82,17 +83,20 @@ function buildDom() {
 		let keptKinds = ''
 		let keptFlags = ''
 		let keptFavorites = ''
+		let keptRotations = ''
 		for (let i = 0; i < viewerState.imgUrls.length; i++) {
 			if (viewerState.kinds[i] === KIND_UNVIEWABLE) continue
 			keptUrls.push(viewerState.imgUrls[i])
 			keptKinds += viewerState.kinds[i]
 			keptFlags += viewerState.flags[i]
 			keptFavorites += viewerState.favorites[i]
+			keptRotations += viewerState.rotations[i]
 		}
 		viewerState.imgUrls = keptUrls
 		viewerState.kinds = keptKinds
 		viewerState.flags = keptFlags
 		viewerState.favorites = keptFavorites
+		viewerState.rotations = keptRotations
 	}
 
 	const beautifyLabel = (l) => l.replace(/^\//, '').replaceAll('/', '▹')
@@ -105,7 +109,7 @@ function buildDom() {
 	document.getElementById('titleContainer').innerHTML = title2
 
 	viewerState.imgUrls.forEach(thumbs.add)
-	for (let i = 0; i < viewerState.imgElms.length; i++) { applyFlag(i); applyFavorite(i) }
+	for (let i = 0; i < viewerState.imgElms.length; i++) { applyFlag(i); applyFavorite(i); applyRotation(i) }
 
 	buildDirectoryGrid(siblingUrls, viewerState.dirUrls)
 
@@ -485,15 +489,21 @@ function zoomStyle() {
 	// https://alvarotrigo.com/blog/change-css-javascript/
 
 	function recalculateZoomRange() {
-		let xScale = Math.max(window.innerWidth / vi.naturalWidth, 1) * 0.95
-		let yScale = Math.max(window.innerHeight / vi.naturalHeight, 1) * 0.95
+		// at 90°/270° the image's on-screen footprint is its rotated bounding box,
+		// so swap width/height when fitting it to the viewport
+		const rot = currentRotation()
+		const swap = (rot === 90 || rot === 270)
+		const natW = swap ? vi.naturalHeight : vi.naturalWidth
+		const natH = swap ? vi.naturalWidth : vi.naturalHeight
+		let xScale = Math.max(window.innerWidth / natW, 1) * 0.95
+		let yScale = Math.max(window.innerHeight / natH, 1) * 0.95
 		let startScale = Math.min(xScale, yScale)
 		let endScale   = Math.max(xScale, yScale) * 1.1
 		let zoomSpeed  = (boot.config.zoomSpeed || 1) * endScale / startScale
 		let sheet = `
 			@keyframes slowZoom {
-				0% { transform: scale(`+startScale+`); }
-				100% { transform: scale(`+endScale+`); }
+				0% { transform: rotate(`+rot+`deg) scale(`+startScale+`); }
+				100% { transform: rotate(`+rot+`deg) scale(`+endScale+`); }
 			}
 			.slowZoom {
 				animation: slowZoom `+zoomSpeed+`s;
@@ -727,6 +737,41 @@ function toggleFavorite() {
 }
 //#endregion
 
+//#region MARK:rotation
+// client-side rotation, packed one char per file ('0'..'3' quarter-turns) mirroring
+// flags/favorites and persisted to notes.txt. '[' rotates left, ']' right.
+function rotationDegrees(i) {
+	return (Number(viewerState.rotations[i]) || 0) * 90
+}
+
+function currentRotation() {
+	return rotationDegrees(viewerState.viewedIndex)
+}
+
+// reflect a file's rotation on its thumbnail (0° clears the transform)
+function applyRotation(i) {
+	const el = viewerState.imgElms[i]
+	if (!el) return
+	const deg = rotationDegrees(i)
+	el.style.transform = deg ? `rotate(${deg}deg)` : ''
+}
+
+// rotate the currently-viewed file by deg (±90): spin the thumbnail, re-run zoomStyle
+// when the viewer is open on an image (baking the rotation into the slow-zoom
+// keyframes and refitting for the new aspect), and persist the rotation to notes.txt.
+function rotateBy(deg) {
+	const i = viewerState.viewedIndex
+	if (i < 0 || i >= viewerState.imgUrls.length) return
+	const quarter = (((Number(viewerState.rotations[i]) || 0) + deg / 90) % 4 + 4) % 4
+	viewerState.rotations = viewerState.rotations.slice(0, i) + quarter + viewerState.rotations.slice(i + 1)
+	applyRotation(i)
+	if (window.zoomed && viewerState.kinds[i] === KIND_IMAGE) zoomStyle()
+	fetch(viewerState.imgUrls[i] + '?rotate=' + (quarter * 90)).then(r => r.text()).then(result => {
+		if (result !== 'ok') console.log('rotation failed:', result)
+	})
+}
+//#endregion
+
 function cacheNextImages() {
 	window.setTimeout(() => {
 		for (let i = 0; i < 10; i++) {
@@ -900,6 +945,7 @@ function bindEvents() {
 					viewerState.kinds = viewerState.kinds.slice(0, idx) + viewerState.kinds.slice(idx + 1)
 					viewerState.flags = viewerState.flags.slice(0, idx) + viewerState.flags.slice(idx + 1)
 					viewerState.favorites = viewerState.favorites.slice(0, idx) + viewerState.favorites.slice(idx + 1)
+					viewerState.rotations = viewerState.rotations.slice(0, idx) + viewerState.rotations.slice(idx + 1)
 					if (idx < viewerState.lowestPending) viewerState.lowestPending--
 					for (let i = idx; i < viewerState.imgElms.length; i++)
 						viewerState.imgElms[i].setAttribute('data-index', i)
@@ -924,6 +970,13 @@ function bindEvents() {
 		// favorite: toggle on/off (independent of the flag)
 		else if (e.key == 'h') {
 			toggleFavorite()
+		}
+		// rotate the viewed file & its thumbnail left/right (client-side)
+		else if (e.key == '[') {
+			rotateBy(-90)
+		}
+		else if (e.key == ']') {
+			rotateBy(90)
 		}
 	}
 

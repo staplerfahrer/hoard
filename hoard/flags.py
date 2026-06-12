@@ -1,13 +1,16 @@
-"""Per-file pick/reject flags and favorites, persisted in a human-friendly
-notes.txt per directory.
+"""Per-file pick/reject flags, favorites, and rotations, persisted in a
+human-friendly notes.txt per directory.
 
 Each directory with marked files gets a `notes.txt` holding a YAML `flags:` map of
-{filename: state} and/or a `favorites:` list of filenames. The file is created on
-demand and removed once it holds nothing. Flag states: 'pick', 'reject' (persisted),
-'none' (entry removed). Favorite is an INDEPENDENT toggle — a file can be both a
-pick and a favorite. `handle_directory` packs each file's flag state ('p'/'r'/'n')
-and favorite bit ('1'/'0') one char per file into the gallery bootstrap, mirroring
-the kinds string, so the viewer shows state without extra requests.
+{filename: state}, a `favorites:` list of filenames, and/or a `rotations:` map of
+{filename: degrees}. The file is created on demand and removed once it holds nothing.
+Flag states: 'pick', 'reject' (persisted), 'none' (entry removed). Favorite is an
+INDEPENDENT toggle — a file can be both a pick and a favorite. Rotation is the
+clockwise viewer rotation in degrees (90/180/270; 0 removes the entry), independent
+of the others. `handle_directory` packs each file's flag state ('p'/'r'/'n'),
+favorite bit ('1'/'0'), and rotation quarter-turns ('0'..'3') one char per file into
+the gallery bootstrap, mirroring the kinds string, so the viewer shows state without
+extra requests.
 
 The file is plain YAML (emitted/parsed here, no library) so it stays readable; a
 comment header warns that hoard manages it. Names are emitted bare when they are
@@ -26,10 +29,10 @@ _CHAR      = {'pick': 'p', 'reject': 'r', 'none': 'n'}
 
 # Prepended on every write — guidance for anyone who opens notes.txt by hand.
 _HEADER = (
-	'# hoard notes — pick / reject marks and favorites for the files in this folder.\n'
+	'# hoard notes — pick / reject marks, favorites, and rotations for this folder.\n'
 	'#\n'
-	'# hoard manages this file: it is rewritten whenever you change a flag or favorite\n'
-	'# in the viewer, so hand edits to the "flags"/"favorites" sections may be lost.\n'
+	'# hoard manages this file: it is rewritten whenever you change a flag, favorite,\n'
+	'# or rotation in the viewer, so hand edits to those sections may be lost.\n'
 	'# Filenames must match exactly. Deleting this file clears the folder\'s marks.\n'
 	'\n'
 )
@@ -41,19 +44,20 @@ def _notes_path(directory: str) -> str:
 	return os.path.join(directory, NOTES_FILE)
 
 
-def _read(directory: str) -> tuple[dict[str, str], list[str]]:
-	"""Parse notes.txt → ({filename: state}, [favorite filenames]); empty if absent."""
+def _read(directory: str) -> tuple[dict[str, str], list[str], dict[str, int]]:
+	"""Parse notes.txt → ({filename: state}, [favorites], {filename: degrees}); empty if absent."""
 	try:
 		with open(_notes_path(directory), 'r', encoding='utf-8') as f:
 			lines = f.read().splitlines()
 	except FileNotFoundError:
-		return {}, []
+		return {}, [], {}
 	except Exception:
 		log(f'notes read failed for {directory}: {traceback.format_exc()}')
-		return {}, []
+		return {}, [], {}
 
-	flags: dict[str, str] = {}
-	favorites: list[str]  = []
+	flags: dict[str, str]     = {}
+	favorites: list[str]      = []
+	rotations: dict[str, int] = {}
 	section = None
 	for line in lines:
 		stripped = line.strip()
@@ -71,7 +75,16 @@ def _read(directory: str) -> tuple[dict[str, str], list[str]]:
 				name = _parse_scalar(stripped[1:].strip())
 				if name:
 					favorites.append(name)
-	return flags, favorites
+		elif section == 'rotations':
+			parsed = _parse_entry(stripped)
+			if parsed:
+				try:
+					deg = int(parsed[1]) % 360
+				except ValueError:
+					continue
+				if deg in (90, 180, 270):
+					rotations[parsed[0]] = deg
+	return flags, favorites, rotations
 
 
 def read_flags(directory: str) -> dict[str, str]:
@@ -84,6 +97,11 @@ def read_favorites(directory: str) -> list[str]:
 	return _read(directory)[1]
 
 
+def read_rotations(directory: str) -> dict[str, int]:
+	"""Map of {filename: degrees} from a directory's notes.txt ({} if none)."""
+	return _read(directory)[2]
+
+
 def flag_char(directory_flags: dict[str, str], filename: str) -> str:
 	"""Packed one-char flag state ('p'/'r'/'n') for a file."""
 	return _CHAR.get(directory_flags.get(filename, 'none'), 'n')
@@ -94,6 +112,11 @@ def favorite_char(directory_favorites, filename: str) -> str:
 	return '1' if filename in directory_favorites else '0'
 
 
+def rotation_char(directory_rotations: dict[str, int], filename: str) -> str:
+	"""Packed one-char rotation quarter-turns ('0'..'3') for a file."""
+	return str((directory_rotations.get(filename, 0) // 90) % 4)
+
+
 def set_flag(file_path: str, state: str) -> None:
 	"""Persist a file's pick/reject flag. 'none' clears it; favorites are preserved."""
 	if state not in STATES:
@@ -101,12 +124,12 @@ def set_flag(file_path: str, state: str) -> None:
 	directory = os.path.dirname(file_path)
 	filename  = os.path.basename(file_path)
 	with _lock:
-		flags, favorites = _read(directory)
+		flags, favorites, rotations = _read(directory)
 		if state == 'none':
 			flags.pop(filename, None)
 		else:
 			flags[filename] = state
-		_write(directory, flags, favorites)
+		_write(directory, flags, favorites, rotations)
 
 
 def set_favorite(file_path: str, on: bool) -> None:
@@ -114,18 +137,35 @@ def set_favorite(file_path: str, on: bool) -> None:
 	directory = os.path.dirname(file_path)
 	filename  = os.path.basename(file_path)
 	with _lock:
-		flags, favorites = _read(directory)
+		flags, favorites, rotations = _read(directory)
 		if on:
 			if filename not in favorites:
 				favorites.append(filename)
 		else:
 			favorites = [f for f in favorites if f != filename]
-		_write(directory, flags, favorites)
+		_write(directory, flags, favorites, rotations)
 
 
-def _write(directory: str, flags: dict[str, str], favorites: list[str]) -> None:
+def set_rotation(file_path: str, degrees: int) -> None:
+	"""Persist a file's viewer rotation in degrees. 0 clears it; flags/favorites preserved."""
+	deg = degrees % 360
+	if deg not in (0, 90, 180, 270):
+		raise ValueError(f'bad rotation: {degrees!r}')
+	directory = os.path.dirname(file_path)
+	filename  = os.path.basename(file_path)
+	with _lock:
+		flags, favorites, rotations = _read(directory)
+		if deg == 0:
+			rotations.pop(filename, None)
+		else:
+			rotations[filename] = deg
+		_write(directory, flags, favorites, rotations)
+
+
+def _write(directory: str, flags: dict[str, str], favorites: list[str],
+		rotations: dict[str, int]) -> None:
 	path = _notes_path(directory)
-	if not flags and not favorites:      # nothing left to record — drop the file
+	if not flags and not favorites and not rotations:  # nothing left — drop the file
 		if os.path.isfile(path):
 			os.remove(path)
 		return
@@ -136,6 +176,9 @@ def _write(directory: str, flags: dict[str, str], favorites: list[str]) -> None:
 	if favorites:
 		body.append('favorites:\n')
 		body += [f'  - {_emit_key(name)}\n' for name in favorites]
+	if rotations:
+		body.append('rotations:\n')
+		body += [f'  {_emit_key(name)}: {deg}\n' for name, deg in rotations.items()]
 	with open(path, 'w', encoding='utf-8') as f:
 		f.write(_HEADER + ''.join(body))
 

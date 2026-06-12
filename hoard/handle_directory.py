@@ -41,6 +41,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		kinds           = ''
 		file_flags      = ''
 		file_favorites  = ''
+		file_rotations  = ''
 		client_siblings = []
 		tick('virtual root')
 
@@ -73,6 +74,8 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		file_flags      = _file_flags(file_list)
 		# one char per file: favorite bit ('1'/'0')
 		file_favorites  = _file_favorites(file_list)
+		# one char per file: rotation quarter-turns ('0'..'3')
+		file_rotations  = _file_rotations(file_list)
 		tick('client_children/imgUrls')
 
 		# ── Case 2: at a configured root dir — siblings = other roots ────────
@@ -114,6 +117,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 			'kinds'      : kinds,
 			'flags'      : file_flags,
 			'favorites'  : file_favorites,
+			'rotations'  : file_rotations,
 			'dirUrls'    : client_children,
 			'siblingUrls': client_siblings,
 			'recursive'  : recursive,
@@ -156,6 +160,18 @@ def _file_favorites(file_list: list[str]) -> str:
 		if directory not in cache:
 			cache[directory] = set(flags.read_favorites(directory))
 		out.append(flags.favorite_char(cache[directory], os.path.basename(f)))
+	return ''.join(out)
+
+
+def _file_rotations(file_list: list[str]) -> str:
+	"""Packed one-char rotation quarter-turns ('0'..'3') per file, mirroring img_urls order."""
+	cache: dict[str, dict[str, int]] = {}
+	out: list[str] = []
+	for f in file_list:
+		directory = os.path.dirname(f)
+		if directory not in cache:
+			cache[directory] = flags.read_rotations(directory)
+		out.append(flags.rotation_char(cache[directory], os.path.basename(f)))
 	return ''.join(out)
 
 

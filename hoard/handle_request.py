@@ -56,6 +56,9 @@ def build_response_bytes(req: str) -> bytes:
 	elif '?fav=' in req_server_path:
 		data, mime = handle_flag.run_favorite(req_server_path)
 
+	elif '?rotate=' in req_server_path:
+		data, mime = handle_flag.run_rotation(req_server_path)
+
 	else:
 		result = handle_file.run(req_server_path, range_l, range_u)
 		if result is None:

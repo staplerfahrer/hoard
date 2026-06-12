@@ -116,6 +116,66 @@ def test_favorite_handler_toggles(tmp_path):
 	assert flags.read_favorites(str(tmp_path)) == []
 
 
+# ── rotations (independent of flags & favorites) ─────────────────────────────
+
+def test_set_and_read_rotation(tmp_path):
+	flags.set_rotation(str(tmp_path / 'a.jpg'), 90)
+	assert flags.read_rotations(str(tmp_path)) == {'a.jpg': 90}
+	text = (tmp_path / flags.NOTES_FILE).read_text(encoding='utf-8')
+	assert 'rotations:' in text and 'a.jpg: 90' in text
+
+
+def test_rotation_zero_clears_entry(tmp_path):
+	f = str(tmp_path / 'a.jpg')
+	flags.set_rotation(f, 270)
+	flags.set_rotation(f, 0)
+	assert flags.read_rotations(str(tmp_path)) == {}
+	assert not (tmp_path / flags.NOTES_FILE).exists()
+
+
+def test_rotation_normalises_full_turn(tmp_path):
+	# 360 wraps to 0 → clears
+	flags.set_rotation(str(tmp_path / 'a.jpg'), 360)
+	assert flags.read_rotations(str(tmp_path)) == {}
+
+
+def test_bad_rotation_raises(tmp_path):
+	with pytest.raises(ValueError):
+		flags.set_rotation(str(tmp_path / 'a.jpg'), 45)
+
+
+def test_rotation_is_independent_of_flag_and_favorite(tmp_path):
+	f = str(tmp_path / 'a.jpg')
+	flags.set_flag(f, 'pick')
+	flags.set_favorite(f, True)
+	flags.set_rotation(f, 180)
+	assert flags.read_flags(str(tmp_path)) == {'a.jpg': 'pick'}
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']
+	assert flags.read_rotations(str(tmp_path)) == {'a.jpg': 180}
+	flags.set_rotation(f, 0)                       # clear rotation…
+	assert flags.read_flags(str(tmp_path)) == {'a.jpg': 'pick'}        # …flag survives
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']           # …favorite survives
+
+
+@pytest.mark.parametrize('deg, char', [(0, '0'), (90, '1'), (180, '2'), (270, '3')])
+def test_rotation_char(deg, char):
+	dir_rot = {'a.jpg': deg} if deg else {}
+	assert flags.rotation_char(dir_rot, 'a.jpg') == char
+
+
+def test_rotation_handler_persists(tmp_path):
+	f = tmp_path / 'a.jpg'
+	assert handle_flag.run_rotation(f'{f}?rotate=90') == (b'ok', 'text/plain')
+	assert flags.read_rotations(str(tmp_path)) == {'a.jpg': 90}
+
+
+def test_rotation_handler_rejects_bad_value(tmp_path):
+	data, _ = handle_flag.run_rotation(f'{tmp_path / "a.jpg"}?rotate=45')
+	assert data == b'bad rotation'
+	data, _ = handle_flag.run_rotation(f'{tmp_path / "a.jpg"}?rotate=abc')
+	assert data == b'bad rotation'
+
+
 # ── handler endpoint (GET <file>?flag=<state>) ───────────────────────────────
 
 def test_handler_persists_flag(tmp_path):

@@ -9,3 +9,4 @@ hoard/venv/
 hoard/typings/
 *.bak
 hoard/resources/external_dependencies/
+typings/
