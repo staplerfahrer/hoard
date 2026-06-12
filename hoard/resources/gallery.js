@@ -18,6 +18,7 @@ const viewerState = {
 	imgUrls              : boot.data.imgUrls,
 	kinds                : boot.data.kinds, // one char per imgUrl: KIND_* code
 	flags                : boot.data.flags, // one char per imgUrl: FLAG_* code
+	favorites            : boot.data.favorites, // one char per imgUrl: '1' favorite / '0' not
 	recursive            : boot.data.recursive, // show-all-subfolders view
 	dirUrls              : boot.data.dirUrls,
 	imgElms              : [],
@@ -80,15 +81,18 @@ function buildDom() {
 		const keptUrls = []
 		let keptKinds = ''
 		let keptFlags = ''
+		let keptFavorites = ''
 		for (let i = 0; i < viewerState.imgUrls.length; i++) {
 			if (viewerState.kinds[i] === KIND_UNVIEWABLE) continue
 			keptUrls.push(viewerState.imgUrls[i])
 			keptKinds += viewerState.kinds[i]
 			keptFlags += viewerState.flags[i]
+			keptFavorites += viewerState.favorites[i]
 		}
 		viewerState.imgUrls = keptUrls
 		viewerState.kinds = keptKinds
 		viewerState.flags = keptFlags
+		viewerState.favorites = keptFavorites
 	}
 
 	const beautifyLabel = (l) => l.replace(/^\//, '').replaceAll('/', '▹')
@@ -101,7 +105,7 @@ function buildDom() {
 	document.getElementById('titleContainer').innerHTML = title2
 
 	viewerState.imgUrls.forEach(thumbs.add)
-	for (let i = 0; i < viewerState.imgElms.length; i++) applyFlag(i)
+	for (let i = 0; i < viewerState.imgElms.length; i++) { applyFlag(i); applyFavorite(i) }
 
 	buildDirectoryGrid(siblingUrls, viewerState.dirUrls)
 
@@ -369,8 +373,9 @@ function nextViewableIndex(start, dir) {
 	const n = viewerState.imgUrls.length
 	let i = start
 	for (let count = 0; count < n; count++) {
-		if (i < 0) i = n - 1
-		else if (i >= n) i = 0
+		// clamp
+		if (i < 0) i = 0
+		else if (i >= n) i = n - 1
 		if (viewerState.kinds[i] !== KIND_UNVIEWABLE) return i
 		i += dir
 	}
@@ -380,9 +385,9 @@ function nextViewableIndex(start, dir) {
 function updateViewed(dir = 1) {
 	const n = viewerState.imgUrls.length
 	if (n === 0) return
-	// wrap
-	if (viewerState.viewedIndex < 0) viewerState.viewedIndex = n - 1
-	else if (viewerState.viewedIndex >= n) viewerState.viewedIndex = 0
+	// clamp
+	if (viewerState.viewedIndex < 0) viewerState.viewedIndex = 0
+	else if (viewerState.viewedIndex >= n) viewerState.viewedIndex = n
 	// skip files the viewer can't display, continuing in the travel direction
 	const landed = nextViewableIndex(viewerState.viewedIndex, dir >= 0 ? 1 : -1)
 	if (landed === -1) return // nothing displayable
@@ -391,6 +396,7 @@ function updateViewed(dir = 1) {
 	updateCookie(window.location.href, viewerState.viewedIndex)
 	borderViewed()
 	updateFlagButton()
+	updateFavoriteButton()
 	if (!window.zoomed) return
 
 	// update & display
@@ -656,6 +662,7 @@ function selectThumb(index) {
 	viewerState.viewedIndex = index
 	borderViewed(false)
 	updateFlagButton()
+	updateFavoriteButton()
 	updateCookie(window.location.href, viewerState.viewedIndex)
 }
 
@@ -692,6 +699,32 @@ function cycleFlag() {
 		if (result !== 'ok') console.log('flag failed:', result)
 	})
 }
+
+// favorite is independent of the pick/reject flag — its own heart badge & button
+function applyFavorite(i) {
+	const cell = cellOf(viewerState.imgElms[i])  // the .tn-wrap; ::after draws the heart
+	if (cell) cell.classList.toggle('favorite', viewerState.favorites[i] === '1')
+}
+
+// paint the bar heart button with the currently-viewed file's favorite state
+function updateFavoriteButton() {
+	const hb = document.getElementById('heartButton')
+	if (!hb) return
+	hb.classList.toggle('favorite', viewerState.favorites[viewerState.viewedIndex] === '1')
+}
+
+// toggle the viewed file's favorite on/off and persist it ('h' key / heart button)
+function toggleFavorite() {
+	const i = viewerState.viewedIndex
+	if (i < 0 || i >= viewerState.imgUrls.length) return
+	const on = viewerState.favorites[i] !== '1'
+	viewerState.favorites = viewerState.favorites.slice(0, i) + (on ? '1' : '0') + viewerState.favorites.slice(i + 1)
+	applyFavorite(i)
+	updateFavoriteButton()
+	fetch(viewerState.imgUrls[i] + '?fav=' + (on ? 'on' : 'off')).then(r => r.text()).then(result => {
+		if (result !== 'ok') console.log('favorite failed:', result)
+	})
+}
 //#endregion
 
 function cacheNextImages() {
@@ -720,6 +753,7 @@ function bindEvents() {
 	}
 
 	document.getElementById('flagButton').onclick = cycleFlag
+	document.getElementById('heartButton').onclick = toggleFavorite
 
 	// press-and-hold a thumbnail to SELECT it (outline only); a quick click still
 	// opens it (img.onclick = toggleZoom). Delegated on the container so it scales.
@@ -865,6 +899,7 @@ function bindEvents() {
 					viewerState.imgUrls.splice(idx, 1)
 					viewerState.kinds = viewerState.kinds.slice(0, idx) + viewerState.kinds.slice(idx + 1)
 					viewerState.flags = viewerState.flags.slice(0, idx) + viewerState.flags.slice(idx + 1)
+					viewerState.favorites = viewerState.favorites.slice(0, idx) + viewerState.favorites.slice(idx + 1)
 					if (idx < viewerState.lowestPending) viewerState.lowestPending--
 					for (let i = idx; i < viewerState.imgElms.length; i++)
 						viewerState.imgElms[i].setAttribute('data-index', i)
@@ -885,6 +920,10 @@ function bindEvents() {
 		// flag: cycle none → pick → reject → none
 		else if (e.key == 'p') {
 			cycleFlag()
+		}
+		// favorite: toggle on/off (independent of the flag)
+		else if (e.key == 'h') {
+			toggleFavorite()
 		}
 	}
 
@@ -996,7 +1035,9 @@ resumeSession()
 highlightLastDir()
 thumbs.loadVisible()
 thumbs.loadRandomly()
+thumbs.retryFailed()
 bindEvents()
 borderViewed()
 updateFlagButton()
+updateFavoriteButton()
 //#endregion

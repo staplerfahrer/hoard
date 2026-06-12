@@ -73,6 +73,49 @@ def test_flag_char_unknown_file_is_none():
 	assert flags.flag_char({}, 'missing.jpg') == 'n'
 
 
+# ── favorites (independent of the pick/reject flag) ──────────────────────────
+
+def test_set_and_read_favorite(tmp_path):
+	flags.set_favorite(str(tmp_path / 'a.jpg'), True)
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']
+	text = (tmp_path / flags.NOTES_FILE).read_text(encoding='utf-8')
+	assert 'favorites:' in text and '- a.jpg' in text
+
+
+def test_favorite_is_independent_of_flag(tmp_path):
+	# a file can be both a pick and a favorite, and changing one keeps the other
+	f = str(tmp_path / 'a.jpg')
+	flags.set_flag(f, 'pick')
+	flags.set_favorite(f, True)
+	assert flags.read_flags(str(tmp_path)) == {'a.jpg': 'pick'}
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']
+	flags.set_flag(f, 'none')                     # clear the flag…
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']   # …favorite survives
+	flags.set_favorite(f, False)                  # clear the favorite…
+	assert flags.read_flags(str(tmp_path)) == {}  # …nothing left → file gone
+	assert not (tmp_path / flags.NOTES_FILE).exists()
+
+
+def test_favorite_off_removes_only_that_file(tmp_path):
+	flags.set_favorite(str(tmp_path / 'a.jpg'), True)
+	flags.set_favorite(str(tmp_path / 'b.jpg'), True)
+	flags.set_favorite(str(tmp_path / 'a.jpg'), False)
+	assert flags.read_favorites(str(tmp_path)) == ['b.jpg']
+
+
+def test_favorite_char():
+	assert flags.favorite_char({'a.jpg'}, 'a.jpg') == '1'
+	assert flags.favorite_char({'a.jpg'}, 'b.jpg') == '0'
+
+
+def test_favorite_handler_toggles(tmp_path):
+	f = tmp_path / 'a.jpg'
+	assert handle_flag.run_favorite(f'{f}?fav=on') == (b'ok', 'text/plain')
+	assert flags.read_favorites(str(tmp_path)) == ['a.jpg']
+	handle_flag.run_favorite(f'{f}?fav=off')
+	assert flags.read_favorites(str(tmp_path)) == []
+
+
 # ── handler endpoint (GET <file>?flag=<state>) ───────────────────────────────
 
 def test_handler_persists_flag(tmp_path):

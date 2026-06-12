@@ -44,18 +44,16 @@ const thumbs = (function(){
 		img.alt = decodeURIComponent(url)
 		img.title = decodeURIComponent(url)
 		img.setAttribute('data-index', i)
-		img.setAttribute('data-src', `${
-			location.protocol}//${
-			window.location.hostname}${port}${
-			url}?tn`)
-		img.setAttribute('src', '/thumbnail-placeholder.png')
+		img._src = `${location.protocol}//${window.location.hostname}${port}${url}?tn`
+		img.src = '/thumbnail-placeholder.png'
 		img.onclick = toggleZoom
-		const par = document.getElementById('thumbnailContainer')
+		// always wrap: the .tn-wrap is the grid cell and the positioning context for
+		// the favorite heart (::after) and, in the recursive view, the folder caption
+		const wrap = document.createElement('div')
+		wrap.classList.add('tn-wrap')
+		wrap.appendChild(img)
 		if (viewerState.recursive) {
-			// wrap so we can caption the file's subfolder (relative to the current dir)
-			const wrap = document.createElement('div')
-			wrap.classList.add('tn-wrap')
-			wrap.appendChild(img)
+			// caption the file's subfolder (relative to the current dir)
 			const rel = relativeFolder(url)
 			if (rel) {
 				const caption = document.createElement('div')
@@ -64,10 +62,8 @@ const thumbs = (function(){
 				caption.title = rel
 				wrap.appendChild(caption)
 			}
-			par.appendChild(wrap)
-		} else {
-			par.appendChild(img)
 		}
+		document.getElementById('thumbnailContainer').appendChild(wrap)
 		viewerState.imgElms.push(img)
 	}
 
@@ -87,25 +83,26 @@ const thumbs = (function(){
 			return
 		img._requested = true
 		try {
-			img.setAttribute('src', img.getAttribute('data-src'))
-			img.removeAttribute('data-src')
+			img.src = img._src
 			img.onload = (e) => {
 				e.target.classList.remove('tn-loading')
-				// e.target.classList.add('tn-fade-in')
 				e.target._loaded = true
+				e.target._failed = false
 			}
 			img.onerror = (e) => {
 				img.classList.remove('tn-loading')
 				img._loaded = true
+				img._failed = true   // e.g. a transient 503; retryFailedThumbs() re-requests it
 			}
 		} catch (e) {
 			img.classList.remove('tn-loading')
 			img._loaded = true
+			img._failed = true
 		}
 	}
 
 	function loadVisibleThumbs() {
-		const fps = 10
+		const fps = 30
 
 		for (var i = viewerState.lowestPending; i < viewerState.imgElms.length; i++) {
 			var img = viewerState.imgElms[i]
@@ -147,11 +144,32 @@ const thumbs = (function(){
 		window.setTimeout(loadThumbsRandomly, 1000 / fps)
 	}
 
+	// Re-request thumbnails that failed to load (e.g. a transient 503 while the server
+	// was busy). Runs once a minute; retries the on-screen failures (off-screen ones
+	// are retried when they next become visible).
+	function retryFailedThumbs() {
+		const RETRY_MS = 60000
+		for (let i = 0; i < viewerState.imgElms.length; i++) {
+			const img = viewerState.imgElms[i]
+			if (!img._failed || !img._src || !isVisible(img)) continue
+			img._failed = false
+			img.classList.add('tn-loading')
+			// failed loads aren't cached, but re-assigning the same URL can be a no-op;
+			// clear src first so the assignment forces a fresh request
+			const src = img._src
+			img.removeAttribute('src')
+			img.src = src
+			if (!img.src) console.log(i, img.src)
+		}
+		window.setTimeout(retryFailedThumbs, RETRY_MS)
+	}
+
 	return {
 		addViewerState: addViewerState,
 		setThumbnailStyle: setThumbnailStyle,
 		add: add,
 		loadVisible: loadVisibleThumbs,
 		loadRandomly: loadThumbsRandomly,
+		retryFailed: retryFailedThumbs,
 	}
 })()

@@ -8,3 +8,4 @@ hoard/resources/libjpeg-62.dll
 hoard/venv/
 hoard/typings/
 *.bak
+hoard/resources/external_dependencies/

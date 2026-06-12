@@ -30,7 +30,7 @@ def _writer() -> None:
 			if size > MAX_LOG_BYTES:
 				f.close()
 				try:
-					os.replace(LOG_FILE, LOG_FILE + '.1')  # atomically overwrites old .1
+					os.replace(LOG_FILE, LOG_FILE.with_name(LOG_FILE.name + '.1'))  # atomically overwrites old .1
 				except OSError:
 					pass
 				f = open(LOG_FILE, 'a', encoding='utf-8')

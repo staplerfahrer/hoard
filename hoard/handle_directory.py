@@ -40,6 +40,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		img_urls        = []
 		kinds           = ''
 		file_flags      = ''
+		file_favorites  = ''
 		client_siblings = []
 		tick('virtual root')
 
@@ -70,6 +71,8 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 		kinds           = ''.join(str(fs.classify(f)) for f in file_list)
 		# one char per file: pick/reject/none flag ('p'/'r'/'n')
 		file_flags      = _file_flags(file_list)
+		# one char per file: favorite bit ('1'/'0')
+		file_favorites  = _file_favorites(file_list)
 		tick('client_children/imgUrls')
 
 		# ── Case 2: at a configured root dir — siblings = other roots ────────
@@ -110,6 +113,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 			'imgUrls'    : img_urls,
 			'kinds'      : kinds,
 			'flags'      : file_flags,
+			'favorites'  : file_favorites,
 			'dirUrls'    : client_children,
 			'siblingUrls': client_siblings,
 			'recursive'  : recursive,
@@ -140,6 +144,18 @@ def _file_flags(file_list: list[str]) -> str:
 		if directory not in cache:
 			cache[directory] = flags.read_flags(directory)
 		out.append(flags.flag_char(cache[directory], os.path.basename(f)))
+	return ''.join(out)
+
+
+def _file_favorites(file_list: list[str]) -> str:
+	"""Packed one-char favorite bit ('1'/'0') per file, mirroring img_urls order."""
+	cache: dict[str, set[str]] = {}
+	out: list[str] = []
+	for f in file_list:
+		directory = os.path.dirname(f)
+		if directory not in cache:
+			cache[directory] = set(flags.read_favorites(directory))
+		out.append(flags.favorite_char(cache[directory], os.path.basename(f)))
 	return ''.join(out)
 
 

@@ -166,8 +166,7 @@ def ui():
 		daemon=True).start()
 
 	sec_per_frame = 1 / 60
-	last_rq = 0
-	req_sec_avg = 0
+	sec_req_avg = 0
 	urls = _server_urls()
 	# when bound to all interfaces, list every reachable URL; the title shows the primary one
 	addresses_line = '' if len(urls) <= 1 else 'Reachable at  ' + '   '.join(urls) + '\n'
@@ -186,10 +185,9 @@ def ui():
 				b   = stats.bytes_served
 				pt  = stats.processing_time
 				rq  = stats.requests_served
-			req_sec = (rq - last_rq) / sec_per_frame
-			req_sec_avg = req_sec * 0.005 + req_sec_avg * 0.995
-			last_rq = rq
-			stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {req_sec_avg:.0f} req/s'
+			sec_req = pt / (rq if rq else 1)
+			sec_req_avg = sec_req #sec_req_avg * 0.99 + sec_req * 0.01
+			stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {sec_req_avg:.3f} sec/req'
 			content = (
 				f'{title}\n'
 				f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
