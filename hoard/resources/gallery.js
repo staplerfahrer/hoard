@@ -914,7 +914,7 @@ function bindEvents() {
 			toggleZoom()
 		}
 		// toggle full screen
-		else if (e.key == 'f') {
+		else if (!e.ctrlKey && e.key == 'f') {
 			// todo: not nice, use global state object
 			// todo: esc doesn't stop the video
 			const fe = document.fullscreenElement
