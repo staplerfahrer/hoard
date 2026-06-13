@@ -15,6 +15,9 @@
 	"thumbBackgroundColor"    : "#242321",
 	"thumbnailPorts"          : [8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009],
 	"thumbnailWidthHeight"    : [400, 400],
+	"thumbsBusyTimeout"       : 100,
+	"thumbsPerSec"            : 30,
+	"thumbsRetriesPerSec"     : 60000,
 	"videoThumbnailTimeStamps": ["00:00:10.000", "00:00:01.000", "00:00:00.000"],
-	"zoomSpeed"               : "180"
+	"zoomSpeed"               : 180
 }

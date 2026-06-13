@@ -38,12 +38,15 @@ def inject_config(fake_root):
 		'thumbnailPorts'          : [8001],
 		'thumbnailWidthHeight'    : [400, 400],
 		'thumbBackgroundColor'    : '#242321',
+		'thumbsBusyTimeout'       : 100,
+		'thumbsPerSec'            : 30,
+		'thumbsRetriesPerSec'     : 60000,
 		'allowDelete'             : True,
 		'autoPlayTimer'           : 9000,
 		'cacheSeconds'            : 100,
 		'scrollRateLimitMs'       : 100,
 		'streamingChunkBytes'     : 1048576,
-		'zoomSpeed'               : '180',
+		'zoomSpeed'               : 180,
 		'videoThumbnailTimeStamps': ['00:00:00.000'],
 	})
 	yield

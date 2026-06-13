@@ -104,9 +104,11 @@ function buildDom() {
 	const title1 = `hoard ${viewerState.imgUrls.length} ${currentPathLabel}`
 	document.title = title1
 
+	const tc = document.getElementById('titleContainer')
 	const count = viewerState.imgUrls.length
 	const title2 = `${currentPathLabel} <span style="opacity:0.5">—</span> ${count} ${count === 1 ? 'file' : 'files'}`
-	document.getElementById('titleContainer').innerHTML = title2
+	tc.innerHTML = title2
+	tc.title = tc.innerText
 
 	viewerState.imgUrls.forEach(thumbs.add)
 	for (let i = 0; i < viewerState.imgElms.length; i++) { applyFlag(i); applyFavorite(i); applyRotation(i) }
@@ -121,17 +123,9 @@ function buildDom() {
 		np.onclick = ()=>{navigateTo(siblingUrls[idx - 1]); return false}
 		np.href = navTarget(siblingUrls[idx - 1])
 		np.innerText += ' ' + beautifyLabel(decodeURIComponent(siblingUrls[idx - 1]))
+		np.title = np.innerText
 	} else {
 		np.classList.add('nav-hidden')
-	}
-
-	const nu = document.getElementById('navUp')
-	if (cur !== '/') {
-		nu.onclick = ()=>{navigateTo(viewerState.dirUrls[0]); return false}
-		nu.href = navTarget(viewerState.dirUrls[0])
-		nu.innerText += ' ' + beautifyLabel(decodeURIComponent(viewerState.dirUrls[0]))
-	} else {
-		nu.classList.add('nav-hidden')
 	}
 
 	const nn = document.getElementById('navNext')
@@ -139,6 +133,7 @@ function buildDom() {
 		nn.onclick = ()=>{navigateTo(siblingUrls[idx + 1]); return false}
 		nn.href = navTarget(siblingUrls[idx + 1])
 		nn.innerText = beautifyLabel(decodeURIComponent(siblingUrls[idx + 1])) + ' ' + nn.innerText
+		nn.title = nn.innerText
 	} else {
 		nn.classList.add('nav-hidden')
 	}
@@ -772,6 +767,23 @@ function rotateBy(deg) {
 }
 //#endregion
 
+//#region MARK:load progress
+// Poll how many thumbnails have finished loading (thumbs.js sets `_loaded` on each
+// img's onload/onerror) and drive the gold progress bar under the nav. Reschedules
+// until every thumbnail is done, then fades the bar out via the .complete class.
+function updateLoadProgress() {
+	const bar = document.getElementById('loadProgress')
+	if (!bar) return
+	const total = viewerState.imgElms.length
+	if (total === 0) { bar.classList.add('complete'); return }
+	let loaded = 0
+	for (let i = 0; i < total; i++) if (viewerState.imgElms[i]._loaded) loaded++
+	bar.style.width = (loaded / total) * 100 + '%'
+	if (loaded >= total) { bar.classList.add('complete'); return }
+	window.setTimeout(updateLoadProgress, 200)
+}
+//#endregion
+
 function cacheNextImages() {
 	window.setTimeout(() => {
 		for (let i = 0; i < 10; i++) {
@@ -1093,4 +1105,5 @@ bindEvents()
 borderViewed()
 updateFlagButton()
 updateFavoriteButton()
+updateLoadProgress()
 //#endregion

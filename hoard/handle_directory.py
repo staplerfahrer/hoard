@@ -103,14 +103,17 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 
 	bootstrap = json.dumps({
 		'config': {                          # static; identical for every directory
-			'thumbnailPorts'      : config('thumbnailPorts'),
-			'thumbnailWidthHeight': config('thumbnailWidthHeight'),
-			'zoomSpeed'           : config('zoomSpeed'),
-			'scrollRateLimitMs'   : config('scrollRateLimitMs'),
-			'autoPlayTimer'       : config('autoPlayTimer'),
 			'allowDelete'         : config('allowDelete'),
+			'autoPlayTimer'       : config('autoPlayTimer'),
 			'displayUnrenderables': config('displayUnrenderables'),
 			'preferAltNavigation' : config('preferAltNavigation'),
+			'scrollRateLimitMs'   : config('scrollRateLimitMs'),
+			'thumbnailPorts'      : config('thumbnailPorts'),
+			'thumbnailWidthHeight': config('thumbnailWidthHeight'),
+			'thumbsBusyTimeout'   : config('thumbsBusyTimeout'),
+			'thumbsPerSec'        : config('thumbsPerSec'),
+			'thumbsRetriesPerSec' : config('thumbsRetriesPerSec'),
+			'zoomSpeed'           : config('zoomSpeed'),
 		},
 		'data': {                            # per-directory
 			'imgUrls'    : img_urls,

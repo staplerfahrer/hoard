@@ -1,5 +1,8 @@
 const thumbs = (function(){
 	const ports = boot.config.thumbnailPorts
+	const BUSY_LOAD_DELAY = boot.config.thumbsBusyTimeout  // const BUSY_LOAD_DELAY = 100
+	const RETRY_MS = boot.config.thumbsRetriesPerSec  // const RETRY_MS = 60000
+	const THUMBS_FPS = boot.config.thumbsPerSec  // const THUMBS_FPS = 30
 
 	let viewerState = {}
 
@@ -102,8 +105,6 @@ const thumbs = (function(){
 	}
 
 	function loadVisibleThumbs() {
-		const fps = 30
-
 		for (var i = viewerState.lowestPending; i < viewerState.imgElms.length; i++) {
 			var img = viewerState.imgElms[i]
 			if (!isVisible(img))
@@ -118,15 +119,13 @@ const thumbs = (function(){
 			viewerState.lowestPending++
 
 		// schedule next
-		window.setTimeout(loadVisibleThumbs, 1000 / fps)
+		window.setTimeout(loadVisibleThumbs, 1000 / THUMBS_FPS)
 	}
 
 	function loadThumbsRandomly() {
-		const fps = 10
-
 		if (window.busyScrolling)
 			// schedule next (same frame interval as below — fps is frames/sec)
-			return window.setTimeout(loadThumbsRandomly, 1000 / fps)
+			return window.setTimeout(loadThumbsRandomly, 1000 / BUSY_LOAD_DELAY)
 
 		let next = viewerState.lowestPending + Math.floor(
 			(Math.random() ** 1.6) * (viewerState.imgElms.length - viewerState.lowestPending + 1))
@@ -141,14 +140,13 @@ const thumbs = (function(){
 			load(next)
 
 		// schedule next
-		window.setTimeout(loadThumbsRandomly, 1000 / fps)
+		window.setTimeout(loadThumbsRandomly, 1000 / THUMBS_FPS)
 	}
 
 	// Re-request thumbnails that failed to load (e.g. a transient 503 while the server
 	// was busy). Runs once a minute; retries the on-screen failures (off-screen ones
 	// are retried when they next become visible).
 	function retryFailedThumbs() {
-		const RETRY_MS = 60000
 		for (let i = 0; i < viewerState.imgElms.length; i++) {
 			const img = viewerState.imgElms[i]
 			if (!img._failed || !img._src || !isVisible(img)) continue
