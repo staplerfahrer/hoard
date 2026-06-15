@@ -55,6 +55,12 @@ const FLAG_REJECT = 'r'
 const FLAG_CYCLE  = { [FLAG_NONE]: FLAG_PICK, [FLAG_PICK]: FLAG_REJECT, [FLAG_REJECT]: FLAG_NONE }
 const FLAG_STATE  = { [FLAG_NONE]: 'none', [FLAG_PICK]: 'pick', [FLAG_REJECT]: 'reject' }
 
+const THUMB_NOT_LOADED = 0
+const THUMB_REQUESTED = 1
+const THUMB_ERROR = 2
+const THUMB_LOADED = 3
+
+
 // Canonical comparison for two URL paths: compare their fully-DECODED forms, so a
 // match is independent of which encoder (Python's quote vs the browser) produced
 // the percent-escapes. Use decodeURIComponent (not decodeURI) so reserved chars
@@ -271,14 +277,14 @@ function toggleZoom(e) {
 		viewerState.viewedIndex = Number(clickedImg.getAttribute('data-index'))
 	}
 
-	viewerState.imgElms.forEach(img => {
-		if (img._requested && !img._loaded) {
-			img.src = '/thumbnail-placeholder.png'
-			img.classList.add('tn-loading')
-			img._requested = false
-		}
-	})
-	viewerState.lowestPending = 0
+	// reset thumb state & loading progress?
+	// viewerState.imgElms.forEach(img => {
+	// 	if (img._state == THUMB_REQUESTED) {
+	// 		img.src = '/thumbnail-placeholder.png'
+	// 		img.classList.add('tn-loading')
+	// 	}
+	// })
+	// viewerState.lowestPending = 0
 
 	window.zoomed = true
 	vb.style.visibility = 'visible'
@@ -768,16 +774,13 @@ function rotateBy(deg) {
 //#endregion
 
 //#region MARK:load progress
-// Poll how many thumbnails have finished loading (thumbs.js sets `_loaded` on each
-// img's onload/onerror) and drive the gold progress bar under the nav. Reschedules
-// until every thumbnail is done, then fades the bar out via the .complete class.
 function updateLoadProgress() {
 	const bar = document.getElementById('loadProgress')
 	if (!bar) return
 	const total = viewerState.imgElms.length
 	if (total === 0) { bar.classList.add('complete'); return }
 	let loaded = 0
-	for (let i = 0; i < total; i++) if (viewerState.imgElms[i]._loaded) loaded++
+	for (let i = 0; i < total; i++) if (viewerState.imgElms[i]._state == THUMB_LOADED) loaded++
 	bar.style.width = (loaded / total) * 100 + '%'
 	if (loaded >= total) { bar.classList.add('complete'); return }
 	window.setTimeout(updateLoadProgress, 200)

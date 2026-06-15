@@ -3,6 +3,10 @@ const thumbs = (function(){
 	const BUSY_LOAD_DELAY = boot.config.thumbsBusyTimeout  // const BUSY_LOAD_DELAY = 100
 	const RETRY_MS = boot.config.thumbsRetriesPerSec  // const RETRY_MS = 60000
 	const THUMBS_FPS = boot.config.thumbsPerSec  // const THUMBS_FPS = 30
+	const THUMB_NOT_LOADED = 0
+	const THUMB_REQUESTED = 1
+	const THUMB_ERROR = 2
+	const THUMB_LOADED = 3
 
 	let viewerState = {}
 
@@ -47,6 +51,7 @@ const thumbs = (function(){
 		img.alt = decodeURIComponent(url)
 		img.title = decodeURIComponent(url)
 		img.setAttribute('data-index', i)
+		img._state = THUMB_NOT_LOADED
 		img._src = `${location.protocol}//${window.location.hostname}${port}${url}?tn`
 		img.src = '/thumbnail-placeholder.png'
 		img.onclick = toggleZoom
@@ -82,25 +87,24 @@ const thumbs = (function(){
 
 	function load(i) {
 		const img = viewerState.imgElms[i]
-		if (img._requested)
+		if (img._state == THUMB_REQUESTED || img._state == THUMB_LOADED)
 			return
-		img._requested = true
 		try {
+			// in case previous load didn't work, remove src
+			if (img.src) img.removeAttribute('src')
 			img.src = img._src
+			img._state = THUMB_REQUESTED
 			img.onload = (e) => {
-				e.target.classList.remove('tn-loading')
-				e.target._loaded = true
-				e.target._failed = false
+				img.classList.remove('tn-loading')
+				img._state = THUMB_LOADED
 			}
 			img.onerror = (e) => {
 				img.classList.remove('tn-loading')
-				img._loaded = true
-				img._failed = true   // e.g. a transient 503; retryFailedThumbs() re-requests it
+				img._state = THUMB_ERROR
 			}
 		} catch (e) {
 			img.classList.remove('tn-loading')
-			img._loaded = true
-			img._failed = true
+			img._state = THUMB_ERROR
 		}
 	}
 
@@ -149,14 +153,8 @@ const thumbs = (function(){
 	function retryFailedThumbs() {
 		for (let i = 0; i < viewerState.imgElms.length; i++) {
 			const img = viewerState.imgElms[i]
-			if (!img._failed || !img._src || !isVisible(img)) continue
-			img._failed = false
-			img.classList.add('tn-loading')
-			// failed loads aren't cached, but re-assigning the same URL can be a no-op;
-			// clear src first so the assignment forces a fresh request
-			const src = img._src
-			img.removeAttribute('src')
-			img.src = src
+			if (img._state == THUMB_LOADED || img._state == THUMB_REQUESTED || !isVisible(img)) continue
+			load(i)
 		}
 		window.setTimeout(retryFailedThumbs, RETRY_MS)
 	}
