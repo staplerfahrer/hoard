@@ -60,7 +60,7 @@ a {
 	width     : 0;
 	background: #c09300;
 	box-shadow: 0 0 4px #c09300;
-	transition: width 0.2s ease-out, opacity 0.6s ease;
+	/* transition: width 0.2s ease-out, opacity 0.6s ease; */
 	pointer-events: none;
 }
 

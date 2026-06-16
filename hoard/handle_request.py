@@ -117,7 +117,7 @@ def _encode(data: bytes, mime: str, range_l: int | None, range_u: int | None, en
 			f'Accept-Ranges: bytes\r\n'
 			f'Content-Type: {mime}\r\n'
 			f'Content-Length: {len(data)}\r\n'
-			f'Cache-Control: max-age={config("cacheSeconds")}\r\n'
+			f'{_set_cache(mime)}\r\n'
 			f'Content-Range: bytes {range_l}-{range_u}/{end}\r\n\r\n', 'utf-8') + data
 	return bytes(
 		f'HTTP/1.1 200 OK\r\n'
@@ -127,7 +127,7 @@ def _encode(data: bytes, mime: str, range_l: int | None, range_u: int | None, en
 		f'{_set_cache(mime)}\r\n\r\n', 'utf-8') + data
 
 def _set_cache(mime: str):
-	if mime in ['text/plain', 'text/html']:
+	if mime in ['text/plain', 'text/html', 'text/css', 'text/javascript']:
 		return f'Cache-Control: max-age=0'
 	else:
-		return f'Cache-Control: max-age={config("cacheSeconds")}'
+		return f'Cache-Control: public, max-age={config("cacheSeconds")}, immutable'

@@ -1,8 +1,9 @@
+let BUSY_LOAD_DELAY = boot.config.thumbsBusyTimeout
+let RETRY_MS = boot.config.thumbsRetriesPerSec
+let THUMBS_FPS = boot.config.thumbsPerSec
+
 const thumbs = (function(){
 	const ports = boot.config.thumbnailPorts
-	const BUSY_LOAD_DELAY = boot.config.thumbsBusyTimeout  // const BUSY_LOAD_DELAY = 100
-	const RETRY_MS = boot.config.thumbsRetriesPerSec  // const RETRY_MS = 60000
-	const THUMBS_FPS = boot.config.thumbsPerSec  // const THUMBS_FPS = 30
 	const THUMB_NOT_LOADED = 0
 	const THUMB_REQUESTED = 1
 	const THUMB_ERROR = 2
