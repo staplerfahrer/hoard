@@ -2,14 +2,16 @@ from typing import Any, Tuple
 import os
 
 from log import log
+from filesystem import MIME
 
 
-RESOURCE_MIMES: dict[str, str] = {
-	'.svg': 'image/svg+xml',
-	'.png': 'image/png',
-	'.css': 'text/css',
-	'.js' : 'text/javascript',
-}
+# RESOURCE_MIMES: dict[str, str] = {
+# 	'.svg': 'image/svg+xml',
+# 	'.png': 'image/png',
+# 	'.css': 'text/css',
+# 	'.js' : 'text/javascript',
+# }
+
 
 # resource_cache: dict[str, Tuple[bytes, str]] = {}
 
@@ -41,7 +43,7 @@ def resource(name: str) -> Any:
 		if name != res_path:
 			continue
 		res_ext = os.path.splitext(res_path)[1]
-		mime = RESOURCE_MIMES.get(res_ext, 'text/plain')
+		mime = MIME.get(res_ext, 'text/plain')
 		with open(info.path, 'rb') as f:
 			return (
 				f.read(MAX_RESOURCE_BYTES),

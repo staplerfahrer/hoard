@@ -125,9 +125,9 @@ def thread_worker():
 
 			start_time = perf_counter()
 
-			try:
+			if len(queue):
 				conn, req = queue.popleft()
-			except IndexError:
+			else:
 				conn, req = thumbnail_queue.popleft()
 
 			first_line = req.split('\r\n', 1)[0]
@@ -136,7 +136,17 @@ def thread_worker():
 			else:
 				log('Popping job ' + req.replace('\r\n', '\\n'))
 
-			bytes_ = handle_request.build_response_bytes(req)
+			bytes_ = bytes()
+			def handle():
+				nonlocal bytes_
+				bytes_ = handle_request.build_response_bytes(req)
+			hdlr = threading.Thread(
+				target=handle,
+				daemon=True
+			)
+			hdlr.start()
+			while hdlr.is_alive():
+				hdlr.join(1)
 			log(f'{len(bytes_)} bytes')
 			conn.sendall(bytes_)
 			conn.close()
@@ -174,9 +184,9 @@ def ui():
 		try:
 			sleep(sec_per_frame)
 			cols  = get_terminal_size().columns - 1
-			title = f' hoard Media Gallery serving at {urls[0]} '
-			pad   = (cols - len(title)) // 2
-			title = f'{"=" * pad}{title}{"=" * pad}'
+			title = f'#   hoard Media Gallery - serving at {urls[0]}   #'
+			#pad   = (cols - len(title)) // 2
+			#title = f'{"=" * pad}{title}{"=" * pad}'
 			request_queue = len(queue) + len(thumbnail_queue)
 			with busy_thread_lock:
 				busy_workers = busy_thread_count
@@ -189,7 +199,9 @@ def ui():
 			sec_req_avg = sec_req #sec_req_avg * 0.99 + sec_req * 0.01
 			stats_line = f'{tn:,} tn  {b:,} B  {pt:.1f} s  {sec_req_avg:.3f} sec/req'
 			content = (
+				f'{"#"*len(title)}\n'
 				f'{title}\n'
+				f'{"#"*len(title)}\n\n'
 				f'Press <CTRL+C> to quit, <CTRL+R> to restart.\n'
 				f'{addresses_line}'
 				f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
