@@ -79,8 +79,21 @@ KIND_PDF        = 3  # shown in an <iframe>
 # native, RAW (dcraw→JPEG), HEIC/HEIF (pillow-heif), and other formats re-encoded
 # via PIL. Kept as an explicit allowlist so classification never opens the file.
 IMAGE_EXTS = frozenset({
-	'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg',
-	'.heic', '.heif', '.tif', '.tiff', '.ico', '.jp2', '.tga',
+	'.bmp',
+	'.gif',
+	'.heic',
+	'.heif',
+	'.ico',
+	'.jp2',
+	'.jpeg',
+	'.jpg',
+	'.png',
+	'.psd',
+	'.svg',
+	'.tga',
+	'.tif',
+	'.tiff',
+	'.webp',
 }) | RAW_EXTS
 
 VIDEO_EXTS = frozenset({'.mp4', '.m4v', '.mov', '.ts', '.webm'})
