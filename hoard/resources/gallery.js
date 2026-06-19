@@ -224,6 +224,8 @@ function updateCookie(newPath, newIndex, newLastChild) {
 		// clear old cookies, from stack overflow
 		let expire = '=;expires=' + new Date().toUTCString() + ';path=/'
 		document.cookie.split(';').forEach(c => {
+			let name = c.replace(/^ +/, '').replace(/=.*/, '')
+			if (name === 'auth') return  // never delete the access-gate cookie
 			document.cookie = c
 				.replace(/^ +/, '')
 				.replace(/=.*/, expire)
