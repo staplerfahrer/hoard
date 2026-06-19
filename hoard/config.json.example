@@ -2,6 +2,7 @@
 	"address"                 : "0.0.0.0",
 	"allowDelete"             : false,
 	"allowRename"             : false,
+	"authToken"               : "change-me-to-a-random-uuid",
 	"autoPlayTimer"           : 9000,
 	"autoStart"               : false,
 	"cacheSeconds"            : 2678400,

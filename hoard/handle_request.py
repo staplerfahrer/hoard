@@ -12,7 +12,17 @@ from config import config, WINDOWS, MACOS
 from resources import resource
 
 
+_NOT_FOUND  = b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 9\r\n\r\nNot Found'
+# placeholder shipped in config.json.example — if left unchanged, lock everything out
+_DEFAULT_AUTH_TOKEN = 'change-me-to-a-random-uuid'
+
+
 def build_response_bytes(req: str) -> bytes:
+	# gate every request on the auth cookie; unauthorized clients get a plain 404
+	# (the server looks nonexistent rather than merely forbidden)
+	if not _authorized(req):
+		return _NOT_FOUND
+
 	req, range_l, range_u = _decode_request(req)
 	# directory-level '?all' = recursive listing; strip it before path translation
 	# (unlike file suffixes ?tn/?del, it must not ride through to_server_path or a
@@ -37,7 +47,7 @@ def build_response_bytes(req: str) -> bytes:
 	# everything below operates on a real file path — reject ../ traversal outside roots
 	elif not fs.within_roots(req_server_path):
 		log(f'404 (outside roots) {req_server_path}')
-		return b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 9\r\n\r\nNot Found'
+		return _NOT_FOUND
 
 	elif req_server_path.endswith('?tn'): # remove ?tn
 		result = handle_thumbnail.run(req_server_path)
@@ -76,7 +86,7 @@ def build_response_bytes(req: str) -> bytes:
 		result = handle_file.run(req_server_path, range_l, range_u)
 		if result is None:
 			log(f'404 {req_server_path}')
-			return b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 9\r\n\r\nNot Found'
+			return _NOT_FOUND
 		data, mime, range_l, range_u, end = result
 
 	return _encode(data, mime, range_l, range_u, end, extra_headers)
@@ -96,6 +106,29 @@ def _open_explorer(serverPath: str) -> tuple[bytes, str]:
 	log(str(args))
 	subprocess.Popen(args)
 	return b'ok', 'text/plain'
+
+
+def _authorized(req: str) -> bool:
+	"""True if the request's Cookie header carries auth=<config 'authToken'>.
+
+	A blank authToken disables the gate (all requests allowed); the unchanged
+	example placeholder denies everything (forcing the operator to set a real
+	token). Header names are case-insensitive; cookie names/values are not. Parses
+	the raw request so it runs before any path handling.
+	"""
+	token = config('authToken')
+	if not token:
+		return True
+	if token == _DEFAULT_AUTH_TOKEN:
+		return False
+	for line in req.split('\r\n'):
+		if line[:7].lower() != 'cookie:':
+			continue
+		for pair in line[7:].split(';'):
+			name, _, value = pair.strip().partition('=')
+			if name == 'auth' and value == token:
+				return True
+	return False
 
 
 def _decode_request(req: str) -> tuple[str, int | None, int | None]:
