@@ -118,9 +118,10 @@ const thumbs = (function(){
 			img._state = THUMB_ERROR
 		}
 		// fetch (rather than <img src>) so we can read the X-Thumb-Dims header for
-		// the filename label's right-hand dimensions. The thumbnail ports are
-		// separate origins, so the server returns CORS headers permitting this.
-		fetch(img._src).then(response => {
+		// the filename label's right-hand dimensions. credentials:'include' sends
+		// the auth cookie to the separate thumbnail-port origins (cross-origin fetch
+		// omits cookies by default); the server returns matching CORS headers.
+		fetch(img._src, { credentials: 'include' }).then(response => {
 			if (!response.ok) { fail(); return }   // e.g. 503 when the server is busy
 			const dims = response.headers.get('X-Thumb-Dims')
 			if (dims && img._dimsEl) {

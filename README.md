@@ -38,11 +38,14 @@ environment, installs dependencies, and launches the server for you.
 
 * Leave it `""` (blank) to disable the gate and serve everyone — fine on a
   trusted private network.
-* Set it to a long random value (e.g. a UUID) to require that callers present a
-  `auth=<token>` cookie; everyone else gets a plain *404*. Cookies are per-origin,
-  so set it on the main port **and** each `thumbnailPorts` entry.
+* Set it to a long random value (e.g. a UUID) to require that callers present an
+  `auth=<token>` cookie; everyone else gets a plain *404*.
 * The example placeholder (`change-me-to-a-random-uuid`) denies *all* requests —
   the server refuses to run open with the default still in place.
+
+To log in, just visit `http://<host>:<port>/?auth=<token>` once. The server
+stores the cookie (host-wide, so it covers every `thumbnailPorts` entry too) and
+redirects to the clean URL. Share that link to grant access.
 
 ## Optional features (config.json)
 

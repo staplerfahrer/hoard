@@ -18,9 +18,18 @@ _DEFAULT_AUTH_TOKEN = 'change-me-to-a-random-uuid'
 
 
 def build_response_bytes(req: str) -> bytes:
+	raw_req = req  # full request (with headers) — needed for cookies / Origin
+
+	# magic link: ?auth=<token> sets the cookie (host-wide, so it covers every
+	# port) and redirects to the clean URL. Checked before the gate so it works
+	# from an unauthorized browser.
+	magic = _auth_magic_link(raw_req)
+	if magic is not None:
+		return magic
+
 	# gate every request on the auth cookie; unauthorized clients get a plain 404
 	# (the server looks nonexistent rather than merely forbidden)
-	if not _authorized(req):
+	if not _authorized(raw_req):
 		return _NOT_FOUND
 
 	req, range_l, range_u = _decode_request(req)
@@ -54,15 +63,7 @@ def build_response_bytes(req: str) -> bytes:
 		if result is None:
 			return b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nRetry-After: 10\r\n\r\nBusy'
 		data, mime, dims = result
-		# the label text is no longer baked into the thumbnail; carry it on the
-		# response so the client can render it as HTML. CORS headers let the page
-		# fetch() thumbnails from the separate thumbnail-port origins and read the
-		# custom header (a plain GET, so no preflight is triggered).
-		extra_headers = [
-			f'X-Thumb-Dims: {quote(dims)}',
-			'Access-Control-Allow-Origin: *',
-			'Access-Control-Expose-Headers: X-Thumb-Dims',
-		]
+		extra_headers = _thumb_headers(dims, raw_req)
 
 	elif req_server_path.endswith('?del'):
 		data, mime = fs.delete_file(req_server_path)
@@ -106,6 +107,66 @@ def _open_explorer(serverPath: str) -> tuple[bytes, str]:
 	log(str(args))
 	subprocess.Popen(args)
 	return b'ok', 'text/plain'
+
+
+def _request_header(req: str, name: str) -> str | None:
+	"""Value of a request header (case-insensitive name), or None if absent."""
+	prefix = name.lower() + ':'
+	for line in req.split('\r\n')[1:]:          # skip the GET request line
+		if line.lower().startswith(prefix):
+			return line[len(prefix):].strip()
+	return None
+
+
+def _thumb_headers(dims: str, req: str) -> list[str]:
+	"""Headers for a thumbnail response: the dimension label, plus credentialed
+	CORS when the request is cross-origin (the browser fetches thumbnails from the
+	separate thumbnail-port origins and must send the auth cookie + read the
+	custom header). A plain GET, so no preflight is triggered."""
+	headers = [f'X-Thumb-Dims: {quote(dims)}']
+	origin = _request_header(req, 'origin')
+	if origin:
+		# echo the caller's origin (can't use '*' alongside credentials); the
+		# legitimate cross-origin callers are this same host's other ports
+		headers += [
+			f'Access-Control-Allow-Origin: {origin}',
+			'Access-Control-Allow-Credentials: true',
+			'Access-Control-Expose-Headers: X-Thumb-Dims',
+		]
+	return headers
+
+
+def _auth_magic_link(req: str) -> bytes | None:
+	"""If the request is `GET /...?auth=<token>` with the configured token, return
+	a redirect that stores the auth cookie (host-wide, long-lived) and strips the
+	token from the URL. Returns None if there's no auth query, the token doesn't
+	match, or the gate is disabled (blank) / not configured (placeholder)."""
+	token = config('authToken')
+	if not token or token == _DEFAULT_AUTH_TOKEN:
+		return None
+	line = req.split('\r\n', 1)[0]
+	if not line.startswith('GET ') or not line.endswith(' HTTP/1.1'):
+		return None
+	path = line[4:-9]                                   # still percent-encoded
+	base, sep, query = path.partition('?')
+	if not sep:
+		return None
+	params = [kv.partition('=') for kv in query.split('&')]
+	if not any(k == 'auth' for k, _, _ in params):
+		return None
+	supplied = unquote(next(v for k, _, v in params if k == 'auth'), errors='replace')
+	if supplied != token:
+		return None                                    # let the gate 404 it
+	# rebuild the query without auth, keeping each param's original '='-presence
+	remaining = '&'.join(k + sep + v for k, sep, v in params if k != 'auth')
+	location  = base + (f'?{remaining}' if remaining else '')
+	cookie    = f'auth={token}; Path=/; Max-Age=315360000; HttpOnly; SameSite=Lax'
+	return bytes(
+		f'HTTP/1.1 302 Found\r\n'
+		f'Location: {location}\r\n'
+		f'Set-Cookie: {cookie}\r\n'
+		f'Cache-Control: no-store\r\n'
+		f'Content-Length: 0\r\n\r\n', 'utf-8')
 
 
 def _authorized(req: str) -> bool:
