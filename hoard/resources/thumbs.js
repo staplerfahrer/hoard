@@ -57,7 +57,7 @@ const thumbs = (function(){
 		img.src = '/thumbnail-placeholder.png'
 		img.onclick = toggleZoom
 		// always wrap: the .tn-wrap is the grid cell and the positioning context for
-		// the favorite heart (::after) and, in the recursive view, the folder caption
+		// the favorite heart (::after), the folder caption (top), and the file label
 		const wrap = document.createElement('div')
 		wrap.classList.add('tn-wrap')
 		wrap.appendChild(img)
@@ -72,8 +72,30 @@ const thumbs = (function(){
 				wrap.appendChild(caption)
 			}
 		}
+		// bottom label: filename (left, from the URL) + dimensions (right, filled in
+		// by load() from the X-Thumb-Dims header once the thumbnail arrives)
+		const name = fileName(url)
+		const label = document.createElement('div')
+		label.classList.add('tn-label')
+		const nameEl = document.createElement('span')
+		nameEl.classList.add('tn-name')
+		nameEl.innerText = name
+		nameEl.title = name
+		const dimsEl = document.createElement('span')
+		dimsEl.classList.add('tn-dims')
+		label.appendChild(nameEl)
+		label.appendChild(dimsEl)
+		wrap.appendChild(label)
+		img._dimsEl = dimsEl
 		document.getElementById('thumbnailContainer').appendChild(wrap)
 		viewerState.imgElms.push(img)
+	}
+
+	function fileName(url) {
+		// the filename (decoded) from a URL path
+		const p = decodeURIComponent(url).replace(/\/+$/, '')
+		const slash = p.lastIndexOf('/')
+		return slash >= 0 ? p.slice(slash + 1) : p
 	}
 
 	function relativeFolder(url) {
@@ -90,23 +112,32 @@ const thumbs = (function(){
 		const img = viewerState.imgElms[i]
 		if (img._state == THUMB_REQUESTED || img._state == THUMB_LOADED)
 			return
-		try {
-			// in case previous load didn't work, remove src
-			if (img.src) img.removeAttribute('src')
-			img.src = img._src
-			img._state = THUMB_REQUESTED
-			img.onload = (e) => {
-				img.classList.remove('tn-loading')
-				img._state = THUMB_LOADED
-			}
-			img.onerror = (e) => {
-				img.classList.remove('tn-loading')
-				img._state = THUMB_ERROR
-			}
-		} catch (e) {
+		img._state = THUMB_REQUESTED
+		const fail = () => {
 			img.classList.remove('tn-loading')
 			img._state = THUMB_ERROR
 		}
+		// fetch (rather than <img src>) so we can read the X-Thumb-Dims header for
+		// the filename label's right-hand dimensions. The thumbnail ports are
+		// separate origins, so the server returns CORS headers permitting this.
+		fetch(img._src).then(response => {
+			if (!response.ok) { fail(); return }   // e.g. 503 when the server is busy
+			const dims = response.headers.get('X-Thumb-Dims')
+			if (dims && img._dimsEl) {
+				try { img._dimsEl.textContent = decodeURIComponent(dims) }
+				catch (e) { img._dimsEl.textContent = dims }
+			}
+			return response.blob().then(blob => {
+				if (img._objUrl) URL.revokeObjectURL(img._objUrl)  // free the previous load
+				img._objUrl = URL.createObjectURL(blob)
+				img.onload = () => {
+					img.classList.remove('tn-loading')
+					img._state = THUMB_LOADED
+				}
+				img.onerror = fail
+				img.src = img._objUrl
+			})
+		}).catch(fail)
 	}
 
 	function loadVisibleThumbs() {

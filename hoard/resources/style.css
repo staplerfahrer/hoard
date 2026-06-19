@@ -269,6 +269,37 @@ a {
 	border-radius : 4px 4px 0 0;
 }
 
+/* bottom label: filename (left, ellipsized) + dimensions (right). Replaces the
+   text that used to be baked into the thumbnail JPEG. */
+.tn-label {
+	position      : absolute;
+	bottom        : 0;
+	left          : 0;
+	right         : 0;
+	display       : flex;
+	gap           : 8px;
+	padding       : 3px 6px;
+	font-size     : 14px;
+	color         : #e6e6e6;
+	background    : #2524226e;
+	pointer-events: none;
+	text-shadow   : 0 0 2px black, 0 0 4px black;
+	border-radius : 0 0 4px 4px;
+}
+
+.tn-name {
+	flex          : 1;
+	min-width     : 0;
+	white-space   : nowrap;
+	overflow      : hidden;
+	text-overflow : ellipsis;
+}
+
+.tn-dims {
+	flex          : none;
+	opacity       : 0.85;
+}
+
 
 
 #backToTop {

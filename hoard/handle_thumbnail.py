@@ -1,7 +1,7 @@
 import io
 import os
 # pip install types-Pillow to fix Pylance
-from PIL import Image, ImageDraw, ImageFont, ImageEnhance, ImageOps, ImageFilter, ImageColor, UnidentifiedImageError
+from PIL import Image, ImageEnhance, ImageOps, ImageFilter, ImageColor, UnidentifiedImageError
 import av
 import threading
 import time
@@ -35,7 +35,7 @@ def _error_icon_copy() -> Image.Image:
 	return _error_icon.copy()
 
 
-def run(server_path: str) -> tuple[bytes, str] | None:
+def run(server_path: str) -> tuple[bytes, str, str] | None:
 	global _active_count, _last_slow_at
 
 	with _lock:
@@ -52,7 +52,6 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 		tn_size   = config('thumbnailWidthHeight')
 		tn_color  = ImageColor.getrgb(config('thumbBackgroundColor'))
 		req_obj   = server_path[:-3]
-		file_name = os.path.basename(req_obj)
 		ext       = os.path.splitext(req_obj)[1].lower()
 
 		req_obj_bytes: io.BytesIO | None  = None
@@ -107,8 +106,9 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 			except Exception:
 				log(f'Exception at "pdf thumbnail": {traceback.format_exc()}')
 
-		# make a thumbnail
-		font = ImageFont.load_default(size=12)
+		# make a thumbnail. The filename/dimension labels are no longer baked into
+		# the pixels — the dimension string is returned and emitted as the
+		# X-Thumb-Dims header, so the client renders it (and the filename) as HTML.
 		try:
 			if req_obj_image:
 				img = req_obj_image # type: ignore
@@ -120,7 +120,8 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 			if img.mode != 'RGBA':
 				img = img.convert('RGBA')
 
-			text_right = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
+			# original-resolution label (computed before thumbnail() shrinks img)
+			dims = f'{pdf_page_count} page{"" if pdf_page_count == 1 else "s"}' if pdf_page_count is not None else f'{img.size[0]} x {img.size[1]}'
 
 			# generate thumbnail
 			# https://pillow.readthedocs.io/en/stable/reference/Image.html#PIL.Image.Image.thumbnail
@@ -129,14 +130,6 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 
 			canvas = Image.new('RGB', tn_size, tn_color)
 			paste_centered(canvas, img)
-
-			draw       = ImageDraw.Draw(canvas, 'RGBA')
-			# truncate the filename so its label can't run into the right-hand label
-			right_w    = draw.textlength(text_right, font=font)
-			max_left   = tn_size[0] - right_w - 2 * TEXT_MARGIN - LABEL_GAP
-			file_label = ellipsize(draw, file_name, font, max_left)
-			draw_label(draw, tn_size, font, tn_color, file_label, 'left') # type: ignore
-			draw_label(draw, tn_size, font, tn_color, text_right, 'right') # type: ignore
 
 			# sharpen
 			canvas = ImageEnhance.Sharpness(canvas).enhance(factor=SHARPEN)
@@ -148,15 +141,12 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 
 			canvas = Image.new('RGB', tn_size, tn_color)
 			paste_centered(canvas, icon, icon)
-
-			draw = ImageDraw.Draw(canvas, 'RGBA')
-			err_label = ellipsize(draw, f'{file_name} cannot be rendered.', font, tn_size[0] - 2 * TEXT_MARGIN - LABEL_GAP)
-			draw_label(draw, tn_size, font, tn_color, err_label, 'left') # type: ignore
+			dims = 'cannot render'
 
 		buf = io.BytesIO()
 		canvas.save(buf, format='jpeg', quality=98, optimize=False, progressive=False, subsampling=1)
 		log('returning jpeg')
-		result: tuple[bytes, str] = (buf.getvalue(), 'image/jpeg')
+		result: tuple[bytes, str, str] = (buf.getvalue(), 'image/jpeg', dims)
 
 		elapsed = time.perf_counter() - t0
 		if elapsed > _SLOW_THRESHOLD:
@@ -169,47 +159,7 @@ def run(server_path: str) -> tuple[bytes, str] | None:
 		with _lock:
 			_active_count -= 1
 
-FONT_COLOR   = (191, 191, 191, 255)
-SHADOW_COLOR = (0, 0, 0, 255)
-TEXT_MARGIN  = 5
-LABEL_GAP    = 10  # min px between the left and right labels (and from the edge)
-
-def ellipsize(draw: ImageDraw.ImageDraw, text: str,
-			  font: ImageFont.FreeTypeFont | ImageFont.ImageFont, max_width: float) -> str:
-	"""Trim text from the end and append '…' until it fits within max_width px."""
-	if max_width <= 0:
-		return ''
-	if draw.textlength(text, font=font) <= max_width:
-		return text
-	while text and draw.textlength(text + '…', font=font) > max_width:
-		text = text[:-1]
-	return text + '…' if text else '…'
-
 def paste_centered(canvas: Image.Image, img: Image.Image, mask: Image.Image | None = None):
 	x = (canvas.size[0] - img.size[0]) // 2
 	y = (canvas.size[1] - img.size[1]) // 2
 	canvas.paste(img, (x, y), mask)
-
-def draw_label(draw: ImageDraw.ImageDraw, canvas_size: tuple[int, int],
-			   font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-			   bg_color: tuple[int, int, int], text: str, align: str):
-	w, h = canvas_size
-	bb   = draw.textbbox((0, 0), text, font=font)
-	tw   = bb[2] - bb[0]
-	y    = h - 18
-	box  = bg_color + (90,)
-	if align == 'right':
-		x = w - tw - TEXT_MARGIN
-		draw.rectangle((w - tw - TEXT_MARGIN - 2, y - 1, w, h), fill=box)
-	else:
-		x = TEXT_MARGIN
-		draw.rectangle((0, y - 1, x + tw + 2, h), fill=box)
-	text_outline(draw, x, y, text, font, SHADOW_COLOR)
-	draw.text((x, y), text, font=font, fill=FONT_COLOR) # type: ignore
-
-def text_outline(draw: ImageDraw.ImageDraw, x: int, y: int, text: str,
-				 font: ImageFont.FreeTypeFont | ImageFont.ImageFont,
-				 color: tuple[int, int, int, int]):
-	for y1 in range(-1, 2):
-		for x1 in range(-1, 2):
-			draw.text((x+x1, y+y1), text,  font=font, fill=color) # type: ignore

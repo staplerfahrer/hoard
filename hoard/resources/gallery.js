@@ -955,7 +955,7 @@ function bindEvents() {
 				fetch(url + '?del').then(r => r.text()).then(result => {
 					if (result !== 'ok') { alert('Delete failed: ' + result); return; }
 					let idx = viewerState.viewedIndex
-					viewerState.imgElms[idx].remove()
+					cellOf(viewerState.imgElms[idx]).remove()  // remove the whole .tn-wrap cell (img + labels)
 					viewerState.imgElms.splice(idx, 1)
 					viewerState.imgUrls.splice(idx, 1)
 					viewerState.kinds = viewerState.kinds.slice(0, idx) + viewerState.kinds.slice(idx + 1)

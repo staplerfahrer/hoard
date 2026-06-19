@@ -1,4 +1,4 @@
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 import subprocess
 import os
 
@@ -20,6 +20,7 @@ def build_response_bytes(req: str) -> bytes:
 	recursive             = req.endswith('?all')
 	req_server_path       = fs.to_server_path(req[:-4] if recursive else req)
 	end                   = None
+	extra_headers         = None
 
 	if resource(req):
 		data, mime = resource(req)
@@ -42,7 +43,16 @@ def build_response_bytes(req: str) -> bytes:
 		result = handle_thumbnail.run(req_server_path)
 		if result is None:
 			return b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nRetry-After: 10\r\n\r\nBusy'
-		data, mime = result
+		data, mime, dims = result
+		# the label text is no longer baked into the thumbnail; carry it on the
+		# response so the client can render it as HTML. CORS headers let the page
+		# fetch() thumbnails from the separate thumbnail-port origins and read the
+		# custom header (a plain GET, so no preflight is triggered).
+		extra_headers = [
+			f'X-Thumb-Dims: {quote(dims)}',
+			'Access-Control-Allow-Origin: *',
+			'Access-Control-Expose-Headers: X-Thumb-Dims',
+		]
 
 	elif req_server_path.endswith('?del'):
 		data, mime = fs.delete_file(req_server_path)
@@ -69,7 +79,7 @@ def build_response_bytes(req: str) -> bytes:
 			return b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-length: 9\r\n\r\nNot Found'
 		data, mime, range_l, range_u, end = result
 
-	return _encode(data, mime, range_l, range_u, end)
+	return _encode(data, mime, range_l, range_u, end, extra_headers)
 
 
 def _open_explorer(serverPath: str) -> tuple[bytes, str]:
@@ -113,7 +123,8 @@ def _decode_request(req: str) -> tuple[str, int | None, int | None]:
 	return requested_path, range_l, range_u
 
 
-def _encode(data: bytes, mime: str, range_l: int | None, range_u: int | None, end: int | None) -> bytes:
+def _encode(data: bytes, mime: str, range_l: int | None, range_u: int | None, end: int | None,
+		extra_headers: list[str] | None = None) -> bytes:
 	if range_l is not None and range_u is not None and end is not None:
 		return bytes(
 			f'HTTP/1.1 206 Partial Content\r\n'
@@ -122,11 +133,13 @@ def _encode(data: bytes, mime: str, range_l: int | None, range_u: int | None, en
 			f'Content-Length: {len(data)}\r\n'
 			f'{_set_cache(mime)}\r\n'
 			f'Content-Range: bytes {range_l}-{range_u}/{end}\r\n\r\n', 'utf-8') + data
+	extra = ''.join(f'{h}\r\n' for h in extra_headers) if extra_headers else ''
 	return bytes(
 		f'HTTP/1.1 200 OK\r\n'
 		f'Accept-Ranges: bytes\r\n'
 		f'Content-Type: {mime}\r\n'
 		f'Content-Length: {len(data)}\r\n'
+		f'{extra}'
 		f'{_set_cache(mime)}\r\n\r\n', 'utf-8') + data
 
 def _set_cache(mime: str):

@@ -55,7 +55,7 @@ def test_encode_200_html_is_not_cached():
 
 def test_encode_200_image_uses_cache_seconds():
 	out = hr._encode(b'\xff\xd8', 'image/jpeg', None, None, None)
-	assert b'Cache-Control: max-age=100\r\n' in out
+	assert b'Cache-Control: public, max-age=100, immutable\r\n' in out
 	assert b'Content-Type: image/jpeg\r\n' in out
 	assert b'Content-Length: 2\r\n' in out
 

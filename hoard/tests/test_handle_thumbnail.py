@@ -1,33 +1,21 @@
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 
 import handle_thumbnail as ht
 
 
-def _draw():
-	img  = Image.new('RGB', (10, 10))
-	font = ImageFont.load_default(size=12)
-	return ImageDraw.Draw(img), font
+def test_run_returns_dimensions(tmp_path):
+	p = tmp_path / 'pic.jpg'
+	Image.new('RGB', (1234, 567), (100, 150, 200)).save(p)
+	data, mime, dims = ht.run(str(p) + '?tn')
+	assert mime == 'image/jpeg'
+	assert dims == '1234 x 567'
+	assert data[:2] == b'\xff\xd8'   # JPEG SOI
 
 
-def test_ellipsize_leaves_short_text_unchanged():
-	draw, font = _draw()
-	assert ht.ellipsize(draw, 'short.jpg', font, 1000) == 'short.jpg'
-
-
-def test_ellipsize_truncates_and_fits():
-	draw, font = _draw()
-	long_name = 'an_extremely_long_filename_that_will_never_fit.jpg'
-	out = ht.ellipsize(draw, long_name, font, 60)
-	assert out.endswith('…')
-	assert out != long_name
-	assert draw.textlength(out, font=font) <= 60
-
-
-def test_ellipsize_zero_width_returns_empty():
-	draw, font = _draw()
-	assert ht.ellipsize(draw, 'anything', font, 0) == ''
-
-
-def test_ellipsize_negative_width_returns_empty():
-	draw, font = _draw()
-	assert ht.ellipsize(draw, 'anything', font, -5) == ''
+def test_run_unreadable_file_reports_cannot_render(tmp_path):
+	p = tmp_path / 'broken.jpg'
+	p.write_text('not an image')
+	data, mime, dims = ht.run(str(p) + '?tn')
+	assert mime == 'image/jpeg'
+	assert dims == 'cannot render'
+	assert data[:2] == b'\xff\xd8'   # still a JPEG (the error icon)
