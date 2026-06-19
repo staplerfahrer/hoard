@@ -1,6 +1,7 @@
 {
 	"address"                 : "0.0.0.0",
 	"allowDelete"             : false,
+	"allowRename"             : false,
 	"autoPlayTimer"           : 9000,
 	"autoStart"               : false,
 	"cacheSeconds"            : 2678400,

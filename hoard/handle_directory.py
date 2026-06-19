@@ -104,6 +104,7 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 	bootstrap = json.dumps({
 		'config': {                          # static; identical for every directory
 			'allowDelete'         : config('allowDelete'),
+			'allowRename'         : config('allowRename'),
 			'autoPlayTimer'       : config('autoPlayTimer'),
 			'displayUnrenderables': config('displayUnrenderables'),
 			'preferAltNavigation' : config('preferAltNavigation'),

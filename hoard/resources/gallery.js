@@ -36,6 +36,7 @@ thumbs.setThumbnailStyle()
 let cache          = {}
 let siblingUrls    = boot.data.siblingUrls
 let allowDelete    = boot.config.allowDelete
+let allowRename    = boot.config.allowRename
 let displayUnrenderables = boot.config.displayUnrenderables
 let preferAltNavigation = boot.config.preferAltNavigation
 // modifier for directory navigation (Ctrl by default, Alt if preferred)
@@ -970,6 +971,25 @@ function bindEvents() {
 					updateViewed()
 				})
 			}
+		}
+		// rename the highlighted file via the browser's native prompt (default = its
+		// current name). Like 'e', targets the hovered thumbnail in gallery mode, else
+		// the viewed file. The new name shifts the natural-sort position, so reload to
+		// re-sort rather than splice the thumbnail into place.
+		else if (e.key == 'F2' && allowRename) {
+			e.preventDefault()
+			const i = (!window.zoomed && hoveredIndex >= 0) ? hoveredIndex : viewerState.viewedIndex
+			if (i < 0 || i >= viewerState.imgUrls.length) return
+			const url = viewerState.imgUrls[i]
+			const oldName = decodeURIComponent(url).split('/').at(-1)
+			const newName = prompt('Rename file:', oldName)
+			if (newName === null) return                       // cancelled
+			const trimmed = newName.trim()
+			if (trimmed === '' || trimmed === oldName) return  // empty or unchanged
+			fetch(url + '?rename=' + encodeURIComponent(trimmed)).then(r => r.text()).then(result => {
+				if (result !== 'ok') { alert('Rename failed: ' + result); return; }
+				window.location.reload()
+			})
 		}
 		// explorer — reveal the thumbnail under the cursor in gallery mode, else the
 		// viewed file. Matters in the recursive ?all view, where files that share the

@@ -8,6 +8,7 @@ from PIL import Image
 
 from config import config, WINDOWS
 from log import log
+import flags
 import plugins
 
 MIME: dict[str, str] = {
@@ -231,6 +232,34 @@ def delete_file(server_path: str) -> tuple[bytes, str]:
 		return b'ok', 'text/plain'
 	except:
 		log(f'Exception at delete: {traceback.format_exc()}')
+		return b'error', 'text/plain'
+
+
+def rename_file(server_path: str) -> tuple[bytes, str]:
+	"""Rename a file in place. URL form: <file>?rename=<new basename>.
+
+	The new name is a bare filename — path separators, traversal and drive/ADS
+	colons are rejected so the rename can't escape the file's own directory, and
+	an existing target is never clobbered.
+	"""
+	if not config('allowRename'):
+		return b'disabled', 'text/plain'
+	path, _, new_name = server_path.partition('?rename=')
+	new_name = new_name.strip()
+	if (not new_name or new_name in ('.', '..')
+			or '/' in new_name or '\\' in new_name or ':' in new_name):
+		return b'bad name', 'text/plain'
+	try:
+		target = os.path.join(os.path.dirname(path), new_name)
+		if not within_roots(target):
+			return b'bad name', 'text/plain'
+		if os.path.exists(target):
+			return b'exists', 'text/plain'
+		os.rename(path, target)
+		flags.rename(path, target)  # carry pick/reject, favorite & rotation marks along
+		return b'ok', 'text/plain'
+	except:
+		log(f'Exception at rename: {traceback.format_exc()}')
 		return b'error', 'text/plain'
 
 

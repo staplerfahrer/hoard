@@ -207,7 +207,6 @@ a {
 	outline-width  : 8px;
 	mask-image     : url(/viewer-mask.png);
 	mask-size      : 100% 100%;
-	/* backdrop-filter: blur(12px); */
 }
 
 #thumbnailContainer {
@@ -230,6 +229,7 @@ a {
    the recursive "show all subfolders" view) the per-thumbnail folder caption */
 .tn-wrap {
 	position: relative; /* width/height set by JS to match .tn */
+	backdrop-filter: blur(12px);
 }
 
 .tn-wrap > .tn {

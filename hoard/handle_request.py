@@ -47,6 +47,9 @@ def build_response_bytes(req: str) -> bytes:
 	elif req_server_path.endswith('?del'):
 		data, mime = fs.delete_file(req_server_path)
 
+	elif '?rename=' in req_server_path:
+		data, mime = fs.rename_file(req_server_path)
+
 	elif req_server_path.endswith('?explorer'):
 		data, mime = _open_explorer(req_server_path)
 

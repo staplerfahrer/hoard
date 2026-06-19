@@ -162,6 +162,31 @@ def set_rotation(file_path: str, degrees: int) -> None:
 		_write(directory, flags, favorites, rotations)
 
 
+def rename(old_path: str, new_path: str) -> None:
+	"""Carry a file's flag/favorite/rotation marks to its new name.
+
+	Called after the file itself is renamed. Old and new live in the same
+	directory (rename is in-place), so both keys share one notes.txt. A no-op if
+	the file had no marks.
+	"""
+	directory = os.path.dirname(old_path)
+	old_name  = os.path.basename(old_path)
+	new_name  = os.path.basename(new_path)
+	if old_name == new_name:
+		return
+	with _lock:
+		flags, favorites, rotations = _read(directory)
+		moved = False
+		if old_name in flags:
+			flags[new_name] = flags.pop(old_name); moved = True
+		if old_name in favorites:
+			favorites = [new_name if f == old_name else f for f in favorites]; moved = True
+		if old_name in rotations:
+			rotations[new_name] = rotations.pop(old_name); moved = True
+		if moved:
+			_write(directory, flags, favorites, rotations)
+
+
 def _write(directory: str, flags: dict[str, str], favorites: list[str],
 		rotations: dict[str, int]) -> None:
 	path = _notes_path(directory)
