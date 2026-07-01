@@ -8,7 +8,7 @@ import handle_file
 import handle_flag
 import handle_thumbnail
 from log import log
-from config import config, WINDOWS, MACOS
+from config import config, config_get, WINDOWS, MACOS
 from resources import resource
 
 
@@ -17,7 +17,7 @@ _NOT_FOUND  = b'HTTP/1.1 404 Not Found\r\ncontent-type: text/plain\r\ncontent-le
 _DEFAULT_AUTH_TOKEN = 'change-me-to-a-random-uuid'
 
 
-def build_response_bytes(req: str) -> bytes:
+def build_response_bytes(req: str, slow: bool = False) -> bytes:
 	raw_req = req  # full request (with headers) — needed for cookies / Origin
 
 	# magic link: ?auth=<token> sets the cookie (host-wide, so it covers every
@@ -49,9 +49,11 @@ def build_response_bytes(req: str) -> bytes:
 
 	elif recursive and os.path.isdir(req_server_path):
 		data, mime = handle_directory.run(req_server_path, recursive=True)
+		extra_headers = _cors_headers()
 
 	elif req_server_path == fs.VIRTUAL_ROOT or os.path.isdir(req_server_path):
 		data, mime = handle_directory.run(req_server_path)
+		extra_headers = _cors_headers()
 
 	# everything below operates on a real file path — reject ../ traversal outside roots
 	elif not fs.within_roots(req_server_path):
@@ -59,7 +61,7 @@ def build_response_bytes(req: str) -> bytes:
 		return _NOT_FOUND
 
 	elif req_server_path.endswith('?tn'): # remove ?tn
-		result = handle_thumbnail.run(req_server_path)
+		result = handle_thumbnail.run(req_server_path, slow)
 		if result is None:
 			return b'HTTP/1.1 503 Service Unavailable\r\nContent-Type: text/plain\r\nContent-Length: 4\r\nRetry-After: 10\r\n\r\nBusy'
 		data, mime, dims = result
@@ -74,6 +76,9 @@ def build_response_bytes(req: str) -> bytes:
 	elif req_server_path.endswith('?explorer'):
 		data, mime = _open_explorer(req_server_path)
 
+	elif '?edit=' in req_server_path:
+		data, mime = _open_editor(req_server_path)
+
 	elif '?flag=' in req_server_path:
 		data, mime = handle_flag.run(req_server_path)
 
@@ -84,7 +89,7 @@ def build_response_bytes(req: str) -> bytes:
 		data, mime = handle_flag.run_rotation(req_server_path)
 
 	else:
-		result = handle_file.run(req_server_path, range_l, range_u)
+		result = handle_file.run(req_server_path, range_l, range_u, slow)
 		if result is None:
 			log(f'404 {req_server_path}')
 			return _NOT_FOUND
@@ -109,6 +114,22 @@ def _open_explorer(serverPath: str) -> tuple[bytes, str]:
 	return b'ok', 'text/plain'
 
 
+def _open_editor(serverPath: str) -> tuple[bytes, str]:
+	# open the file in editors[<index>] from config; index is the ?edit= value.
+	# each editor is a {name, path} entry (mirrors 'roots')
+	target, _, idx = serverPath.rpartition('?edit=')
+	editors = config_get('editors', []) or []
+	try:
+		editor = editors[int(idx)]['path']
+	except (ValueError, IndexError, KeyError, TypeError):
+		log(f'?edit: no editor at index {idx!r} (have {len(editors)})')
+		return b'bad editor', 'text/plain'
+	log(f'editing: {target} with {editor}')
+	# pass args as a list (no shell): a crafted path can't inject a command
+	subprocess.Popen([editor, target])
+	return b'ok', 'text/plain'
+
+
 def _request_header(req: str, name: str) -> str | None:
 	"""Value of a request header (case-insensitive name), or None if absent."""
 	prefix = name.lower() + ':'
@@ -116,6 +137,17 @@ def _request_header(req: str, name: str) -> str | None:
 		if line.lower().startswith(prefix):
 			return line[len(prefix):].strip()
 	return None
+
+
+def _cors_headers() -> list[str]:
+	"""CORS headers for a directory listing response, allowing credentialed cross-origin
+	access from the same host's other ports (e.g. the thumbnail port). The gallery
+	makes XHR requests to those ports and needs the auth cookie + custom header."""
+	return [
+		f'Access-Control-Allow-Origin: *',  # allow all origins, but they must send credentials to get the data
+		'Access-Control-Allow-Credentials: true',
+		'Access-Control-Expose-Headers: X-Thumb-Dims',
+	]
 
 
 def _thumb_headers(dims: str, req: str) -> list[str]:
@@ -181,6 +213,7 @@ def _authorized(req: str) -> bool:
 	if not token:
 		return True
 	if token == _DEFAULT_AUTH_TOKEN:
+		log('authToken is unchanged placeholder; denying all requests')
 		return False
 	for line in req.split('\r\n'):
 		if line[:7].lower() != 'cookie:':
@@ -189,6 +222,7 @@ def _authorized(req: str) -> bool:
 			name, _, value = pair.strip().partition('=')
 			if name == 'auth' and value == token:
 				return True
+	log('request denied: missing or wrong auth cookie')
 	return False
 
 

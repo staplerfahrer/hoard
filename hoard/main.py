@@ -1,6 +1,6 @@
 from collections import deque
 from shutil import get_terminal_size
-from socket import create_server, socket, getaddrinfo, gethostname, AF_INET, SOCK_DGRAM
+from socket import create_server, socket, getaddrinfo, gethostname, AF_INET, SOCK_DGRAM, SOL_SOCKET, SO_SNDBUF
 from time import sleep, perf_counter
 import os
 import sys
@@ -13,7 +13,7 @@ import webbrowser
 from pillow_heif import register_heif_opener # type: ignore
 register_heif_opener()
 
-from config import config, WINDOWS
+from config import config, config_get, WINDOWS
 from log import log
 import handle_request
 import stats
@@ -94,6 +94,19 @@ def listen(address: str, port: int):
 			try:
 				conn, addr = serv.accept()
 				log(f'Connected...{addr}')
+				# Pin a fixed, smallish send buffer. Without this the OS (Windows in
+				# particular, via dynamic send buffering) accepts the whole image into
+				# an auto-growing kernel buffer and conn.sendall() returns long before
+				# the client has actually received the data — so a slow client's send
+				# looks instant and never trips the slow detector. A buffer smaller than
+				# a full image forces sendall() to block at the client's real receive
+				# rate, making the measured send time reflect link speed. (0 → OS default)
+				snd_buf = config_get('sendBufferBytes', 262144)
+				if snd_buf:
+					try:
+						conn.setsockopt(SOL_SOCKET, SO_SNDBUF, snd_buf)
+					except OSError:
+						pass
 				# https://stackoverflow.com/questions/20289981/python-sockets-stop-recv-from-hanging
 				req = str(conn.recv(1_048_576), 'utf-8')
 				if req == '':
@@ -130,6 +143,14 @@ def thread_worker():
 			else:
 				conn, req = thumbnail_queue.popleft()
 
+			# client IP — drives the slow-connection decision (decided before we build
+			# the response) and the per-client status display
+			try:
+				client_ip = conn.getpeername()[0]
+			except Exception:
+				client_ip = '?'
+			slow = stats.is_slow(client_ip)
+
 			first_line = req.split('\r\n', 1)[0]
 			if first_line.startswith('GET ') and first_line.endswith(' HTTP/1.1'):
 				log('Popping get ' + first_line[4:-9])
@@ -139,7 +160,7 @@ def thread_worker():
 			bytes_ = bytes()
 			def handle():
 				nonlocal bytes_
-				bytes_ = handle_request.build_response_bytes(req)
+				bytes_ = handle_request.build_response_bytes(req, slow)
 			hdlr = threading.Thread(
 				target=handle,
 				daemon=True
@@ -148,8 +169,15 @@ def thread_worker():
 			while hdlr.is_alive():
 				hdlr.join(1)
 			log(f'{len(bytes_)} bytes')
+			# time only the send — that's what blocks on a slow client's link — then
+			# let stats decide (by throughput) whether this client is now slow
+			send_start = perf_counter()
 			conn.sendall(bytes_)
 			conn.close()
+			if stats.note_request(client_ip, len(bytes_), perf_counter() - send_start,
+								   '?tn HTTP/1.1' in req):
+				log(f'client {client_ip} is on a slow connection — '
+					f'serving low-quality JPEGs for the next {config_get("slowClientHours", 2)}h')
 
 			elapsed = perf_counter() - start_time
 			with stats.lock:
@@ -207,6 +235,7 @@ def ui():
 				f'\r\033[K{request_queue:>4} queue   {"Q" * min(request_queue, cols - 20)}\n'
 				f'\r\033[K{busy_workers :>4} workers {"W" * min(busy_workers, cols - 20)}\n'
 				f'\r\033[K{stats_line}\n'
+				f'{_clients_block(cols)}'
 			)
 			sys.stdout.write(f'\033[{content.count(chr(10))}A' + content)
 			sys.stdout.flush()
@@ -214,6 +243,26 @@ def ui():
 			# log to file (not stderr — this loop would overwrite it) and keep going
 			log(f'ui() exception {traceback.format_exc()}')
 			sleep(1)  # don't spin a tight error loop hammering the log
+
+
+_CLIENT_ROWS = 8  # fixed height: the ui() repaint counts newlines, so this must not vary
+
+
+def _clients_block(cols: int) -> str:
+	"""A fixed-height status section listing active clients (slow ones flagged with a
+	countdown). Always exactly _CLIENT_ROWS + 1 lines so the cursor-up repaint stays put."""
+	active = stats.active_clients(_CLIENT_ROWS)
+	header = f'\r\033[K{len(active):>4} clients\n'
+	rows = []
+	for ip, remaining in active:
+		if remaining is None:
+			label = 'ok'
+		else:
+			mins, secs = divmod(int(remaining), 60)
+			label = f'SLOW {mins:d}:{secs:02d} left'
+		rows.append(f'\r\033[K     {ip:<15} {label}'[:cols] + '\n')
+	rows += ['\r\033[K\n'] * (_CLIENT_ROWS - len(rows))  # pad to fixed height
+	return header + ''.join(rows)
 
 
 def _hotkey_listener():

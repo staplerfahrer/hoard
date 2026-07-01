@@ -805,6 +805,88 @@ function cacheNextImages() {
 	}, 500)
 }
 
+//#region MARK:video controls
+// true when the viewer is open on a video file (so left/right seek instead of navigate)
+function viewingVideo() {
+	return window.zoomed && viewerState.kinds[viewerState.viewedIndex] === KIND_VIDEO
+}
+
+// seek the open video by `delta` seconds, clamped to [0, duration]
+function seekVideo(delta) {
+	const d = vv.duration
+	let t = vv.currentTime + delta
+	if (t < 0) t = 0
+	else if (!isNaN(d) && t > d) t = d
+	vv.currentTime = t
+}
+//#endregion
+
+//#region MARK:open-with menu
+// editor display names from config (index matches the server's ?edit=<n>)
+const editorNames = boot.config.editors || []
+
+// 'e' action: open the file at index i with File Explorer (the default first option)
+// or a configured editor. With no editors configured, skip the menu and reveal in the
+// file manager directly — the original behaviour. i<0 (no file) → only Explorer, on the
+// current directory.
+function openWith(i) {
+	const hasFile = i >= 0 && i < viewerState.imgUrls.length
+	const fileUrl = hasFile ? viewerState.imgUrls[i] : encodeURIComponent(window.location.pathname)
+
+	const items = [{ label: '📁  File Explorer', run: () => fetch(fileUrl + '?explorer') }]
+	if (hasFile) editorNames.forEach((name, n) => {
+		items.push({ label: name, run: () => fetch(fileUrl + '?edit=' + n) })
+	})
+
+	if (items.length === 1) { items[0].run(); return }  // nothing to choose between
+	showMenu(items)
+}
+
+// minimal modal chooser: ↑/↓ move, Enter/click pick, 1–9 quick-pick, Esc / click-away
+// dismiss. First item starts selected. Captures keys so the gallery doesn't also react.
+function showMenu(items) {
+	closeMenu()
+	const menu = document.createElement('div')
+	menu.id = 'openWithMenu'
+	menu.className = 'open-with-menu'
+	let sel = 0
+	const rows = items.map((it, idx) => {
+		const row = document.createElement('div')
+		row.className = 'menu-item'
+		row.innerHTML = `<span class="menu-key">${idx < 9 ? idx + 1 : ''}</span>${it.label}`
+		row.onmouseenter = () => { sel = idx; paint() }
+		row.onclick = () => { it.run(); closeMenu() }
+		menu.appendChild(row)
+		return row
+	})
+	const paint = () => rows.forEach((r, idx) => r.classList.toggle('selected', idx === sel))
+	paint()
+	document.body.appendChild(menu)
+
+	menu._onKey = (e) => {
+		if (e.key == 'Escape')          { e.preventDefault(); e.stopPropagation(); closeMenu() }
+		else if (e.key == 'ArrowDown')  { e.preventDefault(); e.stopPropagation(); sel = (sel + 1) % items.length; paint() }
+		else if (e.key == 'ArrowUp')    { e.preventDefault(); e.stopPropagation(); sel = (sel - 1 + items.length) % items.length; paint() }
+		else if (e.key == 'Enter')      { e.preventDefault(); e.stopPropagation(); items[sel].run(); closeMenu() }
+		else if (e.key >= '1' && e.key <= '9' && Number(e.key) <= items.length) {
+			e.preventDefault(); e.stopPropagation(); items[Number(e.key) - 1].run(); closeMenu()
+		}
+	}
+	menu._onDown = (e) => { if (!menu.contains(e.target)) closeMenu() }
+	// capture phase so these pre-empt the gallery's document.onkeydown / grid clicks
+	document.addEventListener('keydown', menu._onKey, true)
+	setTimeout(() => document.addEventListener('mousedown', menu._onDown, true), 0)
+}
+
+function closeMenu() {
+	const menu = document.getElementById('openWithMenu')
+	if (!menu) return
+	document.removeEventListener('keydown', menu._onKey, true)
+	document.removeEventListener('mousedown', menu._onDown, true)
+	menu.remove()
+}
+//#endregion
+
 //#region MARK:user events
 // TODO: I wonder if the keyboard just needs to focus a control, like tab...
 function bindEvents() {
@@ -904,13 +986,15 @@ function bindEvents() {
 			viewerState.viewedIndex = Math.min(viewerState.viewedIndex + thumbsPerPage(), viewerState.imgUrls.length - 1)
 			updateViewed(1)
 		}
-		// arrow keys
+		// arrow keys — while a video is open, left/right seek ∓5s instead of navigating
 		else if (e.key == 'ArrowLeft' ) {
+			if (viewingVideo()) { e.preventDefault(); seekVideo(-5); return }
 			viewerState.viewedIndex--
 			changeAutoPlay('reset')
 			updateViewed(-1)
 		}
 		else if (e.key == 'ArrowRight') {
+			if (viewingVideo()) { e.preventDefault(); seekVideo(5); return }
 			viewerState.viewedIndex++
 			changeAutoPlay('reset')
 			updateViewed(1)
@@ -942,7 +1026,7 @@ function bindEvents() {
 				document.exitFullscreen()
 			}
 		}
-		// video controls
+		// video controls — space toggles play/pause
 		else if (e.code == 'Space') {
 			e.preventDefault()
 			if (viewerState.videoState == 'none')
@@ -993,12 +1077,14 @@ function bindEvents() {
 				window.location.reload()
 			})
 		}
-		// explorer — reveal the thumbnail under the cursor in gallery mode, else the
-		// viewed file. Matters in the recursive ?all view, where files that share the
-		// listing live in different folders, so viewedIndex alone reveals the wrong one.
+		// open-with — pick File Explorer (default) or a configured editor for the
+		// thumbnail under the cursor in gallery mode, else the viewed file. Matters in
+		// the recursive ?all view, where files that share the listing live in different
+		// folders, so viewedIndex alone reveals the wrong one.
 		else if (e.key == 'e') {
+			e.preventDefault();
 			const i = (!window.zoomed && hoveredIndex >= 0) ? hoveredIndex : viewerState.viewedIndex
-			fetch(viewerState.imgUrls[i] + '?explorer')
+			openWith(i)
 		}
 		// flag: cycle none → pick → reject → none
 		else if (e.key == 'p') {

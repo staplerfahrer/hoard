@@ -1,9 +1,10 @@
 import io
 import os
 import traceback
-from PIL import Image
+from PIL import Image, ImageColor, ImageOps
 import filesystem as fs
 import plugins
+from config import config, config_get
 from log import log
 
 
@@ -18,7 +19,7 @@ _PIL_MIME: dict[str, str] = {
 
 _PIL_EXTS = frozenset({'.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp'})
 
-def run(server_path: str, range_l: int | None, range_u: int | None) \
+def run(server_path: str, range_l: int | None, range_u: int | None, slow: bool = False) \
 		-> tuple[bytes, str, int | None, int | None, int | None] | None:
 	if not os.path.isfile(server_path):
 		return None
@@ -33,8 +34,17 @@ def run(server_path: str, range_l: int | None, range_u: int | None) \
 			log(f'plugin render failed for {server_path}: {traceback.format_exc()}')
 			return None
 
-	# convert raw files
 	ext = os.path.splitext(server_path)[1].lower()
+
+	# slow client: re-encode any raster image to a small JPEG (transparency flattened)
+	# to cut bandwidth. Skipped for vector (.svg). On failure, fall through to normal
+	# handling below.
+	if slow and ext in fs.IMAGE_EXTS and ext != '.svg':
+		result = _slow_jpeg(server_path, ext)
+		if result is not None:
+			return result
+
+	# convert raw files
 	if ext in fs.RAW_EXTS:
 		data = fs.dcraw_extract(server_path)
 		return (data, 'image/jpeg', None, None, None) if data else None
@@ -92,4 +102,39 @@ def _pil_convert(server_path: str) \
 			return buf.getvalue(), mime, None, None, None
 	except Exception:
 		log(f'handle_file PIL convert: {traceback.format_exc()}')
+		return None
+
+
+def _slow_jpeg(server_path: str, ext: str) \
+		-> tuple[bytes, str, int | None, int | None, int | None] | None:
+	"""Re-encode an image to a low-quality JPEG for a slow client, flattening any
+	transparency onto thumbBackgroundColor. Returns None on failure so the caller can
+	fall back to normal serving."""
+	try:
+		# RAW must be decoded by dcraw first; everything else PIL opens directly
+		if ext in fs.RAW_EXTS:
+			raw = fs.dcraw_extract(server_path)
+			if not raw:
+				return None
+			src = Image.open(io.BytesIO(raw))
+		else:
+			src = Image.open(server_path)
+
+		with src as img:
+			img = ImageOps.exif_transpose(img)  # type: ignore
+			has_alpha = img.mode in ('RGBA', 'LA', 'PA') or \
+				(img.mode == 'P' and 'transparency' in img.info)
+			if has_alpha:
+				rgba   = img.convert('RGBA')
+				canvas = Image.new('RGB', rgba.size, ImageColor.getrgb(config('thumbBackgroundColor')))
+				canvas.paste(rgba, (0, 0), rgba)  # rgba alpha as its own mask
+			else:
+				canvas = img.convert('RGB')
+
+			buf = io.BytesIO()
+			canvas.save(buf, format='JPEG',
+						quality=config_get('slowClientJpegQuality', 50), optimize=True)
+			return buf.getvalue(), 'image/jpeg', None, None, None
+	except Exception:
+		log(f'handle_file slow jpeg: {traceback.format_exc()}')
 		return None

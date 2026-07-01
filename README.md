@@ -47,6 +47,23 @@ To log in, just visit `http://<host>:<port>/?auth=<token>` once. The server
 stores the cookie (host-wide, so it covers every `thumbnailPorts` entry too) and
 redirects to the clean URL. Share that link to grant access.
 
+## Viewer controls
+
+Click a thumbnail (or press *Enter*) to open the viewer; *Escape*/*Enter*
+closes it.
+
+* **Arrow keys / scroll** — move between files in the grid and the viewer.
+* **Video** — while a video is open, *←*/*→* seek back/forward 5 seconds and
+  *Space* toggles play/pause. *f* toggles fullscreen.
+* **p** — cycle the file's flag none → pick → reject → none.
+* **h** — toggle favorite (independent of the flag).
+* **[** / **]** — rotate the file left/right.
+* **e** — "open with" menu: pick *File Explorer* (the default) or one of the
+  editors configured in `editors`. With no editors configured it just reveals
+  the file in your file manager.
+* **F2** — rename the file (requires `allowRename`).
+* **Delete** — soft-delete the file (requires `allowDelete`).
+
 ## Optional features (config.json)
 
 * `allowDelete` — enables soft-delete (the *Delete* key renames a file to
@@ -54,6 +71,18 @@ redirects to the clean URL. Share that link to grant access.
 * `allowRename` — enables in-place rename of the highlighted file with *F2*.
 * `thumbnailPorts` — extra ports the browser round-robins thumbnail requests
   across, to beat the per-origin connection limit.
+* **Adaptive quality on slow links** — if sending a response to a client is too
+  slow (a big-enough transfer below `slowClientMinBytesPerSec`, default 1 MB/s),
+  hoard assumes that client is on a slow connection and, for the next
+  `slowClientHours` (default 2), serves all of its images and thumbnails as
+  low-quality JPEGs (`slowClientJpegQuality`, default 50, transparency
+  flattened). The terminal status display lists the active clients and flags the
+  slow ones with a countdown. Set `slowClientMinBytesPerSec` to `0` to disable.
+* `editors` — a list of `{ name, path }` entries, like `roots` (e.g.
+  `[{ "name": "Paint", "path": "C:\\Windows\\System32\\mspaint.exe" }]`).
+  Pressing *e* on a file pops up an "open with" menu listing *File Explorer*
+  first, then each editor by its `name`. Leave it `[]` to make *e* simply reveal
+  the file in your file manager.
 
 ## Plugins
 

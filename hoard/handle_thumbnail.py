@@ -7,7 +7,7 @@ import threading
 import time
 import traceback
 
-from config import config
+from config import config, config_get
 import filesystem as fs
 import plugins
 from log import log
@@ -35,7 +35,7 @@ def _error_icon_copy() -> Image.Image:
 	return _error_icon.copy()
 
 
-def run(server_path: str) -> tuple[bytes, str, str] | None:
+def run(server_path: str, slow: bool = False) -> tuple[bytes, str, str] | None:
 	global _active_count, _last_slow_at
 
 	with _lock:
@@ -144,7 +144,9 @@ def run(server_path: str) -> tuple[bytes, str, str] | None:
 			dims = 'cannot render'
 
 		buf = io.BytesIO()
-		canvas.save(buf, format='jpeg', quality=98, optimize=False, progressive=False, subsampling=1)
+		# slow clients get a lower-quality thumbnail to save bandwidth
+		quality = config_get('slowClientJpegQuality', 50) if slow else 98
+		canvas.save(buf, format='jpeg', quality=quality, optimize=False, progressive=False, subsampling=1)
 		log('returning jpeg')
 		result: tuple[bytes, str, str] = (buf.getvalue(), 'image/jpeg', dims)
 

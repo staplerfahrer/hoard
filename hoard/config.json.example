@@ -7,12 +7,21 @@
 	"autoStart"               : false,
 	"cacheSeconds"            : 2678400,
 	"displayUnrenderables"    : true,
+	"editors"                 : [
+		{"name": "Paint", "path": "C:\\Windows\\System32\\mspaint.exe"}
+	],
 	"port"                    : 8000,
 	"preferAltNavigation"     : false,
 	"roots"                   : [
 		{"name": "Photos", "path": "N:\\Pictures"}
 	],
 	"scrollRateLimitMs"       : 100,
+	"sendBufferBytes"         : 262144,
+	"slowClientHours"         : 2,
+	"slowClientActiveWindowSec": 30,
+	"slowClientJpegQuality"   : 50,
+	"slowClientMinBytesPerSec": 10485760,
+	"slowClientSampleBytes"   : 1048576,
 	"streamingChunkBytes"     : 10485760,
 	"thumbBackgroundColor"    : "#242321",
 	"thumbnailPorts"          : [8001, 8002, 8003, 8004, 8005, 8006, 8007, 8008, 8009],

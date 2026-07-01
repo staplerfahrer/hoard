@@ -4,7 +4,7 @@ import json
 import os
 import re
 
-from config import config, WINDOWS
+from config import config, config_get, WINDOWS
 from log import log
 import filesystem as fs
 import flags
@@ -107,6 +107,10 @@ def run(server_path: str, recursive: bool = False) -> tuple[bytes, str]:
 			'allowRename'         : config('allowRename'),
 			'autoPlayTimer'       : config('autoPlayTimer'),
 			'displayUnrenderables': config('displayUnrenderables'),
+			# editor display names (index matches ?edit=<n>); each editor is a
+			# {name, path} entry — only the name is sent to the client
+			'editors'             : [e.get('name', e.get('path', ''))
+			                         for e in (config_get('editors', []) or [])],
 			'preferAltNavigation' : config('preferAltNavigation'),
 			'scrollRateLimitMs'   : config('scrollRateLimitMs'),
 			'thumbnailPorts'      : config('thumbnailPorts'),
@@ -163,7 +167,7 @@ def _file_favorites(file_list: list[str]) -> str:
 		directory = os.path.dirname(f)
 		if directory not in cache:
 			cache[directory] = set(flags.read_favorites(directory))
-		out.append(flags.favorite_char(cache[directory], os.path.basename(f)))
+		out.append(flags.favorite_char(cache[directory], os.path.basename(f))) # type: ignore
 	return ''.join(out)
 
 
